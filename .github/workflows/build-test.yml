@@ -1,0 +1,88 @@
+name: Build & Test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ['**']
+    paths:
+    - .github/workflows/build-test.yml
+    - '**.rs'
+    - Cargo.lock
+    - Cargo.toml
+    tags-ignore: ['*']
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ${{ matrix.target.runs-on }}
+    strategy:
+      matrix:
+        target:
+        - cmd: cross
+          name: aarch64-unknown-linux-gnu
+          runs-on: ubuntu-latest
+        - cmd: cargo
+          name: x86_64-apple-darwin
+          runs-on: macos-latest
+        - cmd: cross
+          name: x86_64-unknown-linux-gnu
+          runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Rust
+      id: rust
+      uses: actions-rs/toolchain@v1
+      with:
+        target: ${{ matrix.target.name }}
+        toolchain: stable
+
+    - name: Restore build cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/git/db/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          target/
+        key: build-${{ runner.os }}-${{ matrix.target.name }}-${{ steps.rust.outputs.rustc_hash }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          build-${{ runner.os }}-${{ matrix.target.name }}-${{ steps.rust.outputs.rustc_hash }}-
+          build-${{ runner.os }}-${{ matrix.target.name }}-
+
+    - name: Restore docker cache
+      if: matrix.target.runs-on == 'ubuntu-latest'
+      uses: ScribeMD/docker-cache@0.3.7
+      with:
+        key: build-${{ runner.os }}-${{ matrix.target.name }}
+
+    - name: Install cross
+      if: matrix.target.cmd == 'cross'
+      run: |
+        if ! command -v cross >/dev/null; then
+          cargo install cross
+        fi
+
+    - name: Build
+      run: |
+        ${{ matrix.target.cmd }} build --target ${{ matrix.target.name }}
+        ${{ matrix.target.cmd }} build --target ${{ matrix.target.name }} --release
+
+    - name: Test
+      if: github.ref_name != github.event.repository.default_branch
+      run: ${{ matrix.target.cmd }} test --target ${{ matrix.target.name }}
+
+    - name: Upload artifacts
+      if: github.ref_name == github.event.repository.default_branch
+      uses: actions/upload-artifact@v4
+      with:
+        if-no-files-found: error
+        name: ${{ github.event.repository.name }}-${{ matrix.target.name }}
+        path: |
+          target/${{ matrix.target.name }}/release/${{ github.event.repository.name }}-*
+          !target/${{ matrix.target.name }}/release/*.d

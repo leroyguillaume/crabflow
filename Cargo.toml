@@ -1,0 +1,12 @@
+[workspace]
+members = ["common", "image-builder"]
+resolver = "2"
+
+[workspace.package]
+authors = ["Guillaume Leroy <pro.guillaume.leroy@gmail.com>"]
+categories = ["concurrency"]
+edition = "2021"
+keywords = ["data", "workflow"]
+license = "MIT"
+repository = "https://github.com/leroyguillaume/crabflow"
+version = "0.1.0"
