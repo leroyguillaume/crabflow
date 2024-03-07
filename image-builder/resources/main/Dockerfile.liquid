@@ -1,0 +1,18 @@
+FROM rust:1-alpine AS build
+
+WORKDIR /app
+
+COPY . .
+
+RUN --mount=type=cache,target=target <<EOF /bin/sh -e
+cargo build --release
+cp -r target/release /build
+EOF
+
+{% for target in targets %}
+FROM alpine:3 AS {{ target }}
+
+COPY --from=build /build/{{ target }} /usr/local/bin/{{ target }}
+
+ENTRYPOINT ["/usr/local/bin/{{ target }}"]
+{%endfor %}
