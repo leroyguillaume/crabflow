@@ -13,11 +13,11 @@ use crate::{Error, Options, Result};
 const CMD_CARGO: &str = "cargo";
 const CMD_DOCKER: &str = "docker";
 
-pub trait CargoClient: Send + Sync {
+pub trait CargoClient {
     fn load_targets(&self, dir_path: &Path) -> Result<Vec<String>>;
 }
 
-pub trait DockerClient: Send + Sync {
+pub trait DockerClient {
     fn build(&self, target: &str, tag: &str, path: &Path) -> Result;
 
     fn push(&self, tag: &str) -> Result;

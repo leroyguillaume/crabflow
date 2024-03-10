@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "image-builder"]
+members = ["common", "git-synchronizer", "image-builder"]
 resolver = "2"
 
 [workspace.package]

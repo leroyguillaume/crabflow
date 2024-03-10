@@ -11,7 +11,7 @@ use std::{
 use builder::{DefaultImageBuilder, ImageBuilder};
 use clap::Parser;
 use crabflow_common::init_tracing;
-use notify::{EventKind, RecursiveMode, Watcher};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use tracing::{debug, error, info};
 
 type Result<T = ()> = std::result::Result<T, Error>;
@@ -97,7 +97,7 @@ fn run(args: Args) -> Result {
         debug!("creating file system watcher");
         let mut watcher = notify::recommended_watcher({
             let path = args.path.clone();
-            move |event: std::prelude::v1::Result<notify::Event, notify::Error>| {
+            move |event: std::result::Result<Event, notify::Error>| {
                 let res = event
                     .map_err(Error::from)
                     .and_then(|event| match event.kind {
