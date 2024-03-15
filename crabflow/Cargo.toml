@@ -1,7 +1,11 @@
 [dependencies]
+anyhow = "1"
 clap = {version = "4", features = ["env", "derive"]}
+crabflow-common = {path = "../common", features = ["clap", "db"]}
 crabflow-core = {path = "../core"}
 crabflow-dsl = {path = "../dsl"}
+thiserror = "1"
+tokio = {version = "1", features = ["full"]}
 
 [package]
 description = "CrabFlow crate"

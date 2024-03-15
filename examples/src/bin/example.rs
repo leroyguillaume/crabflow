@@ -1,22 +1,25 @@
 extern crate crabflow;
 extern crate crabflow_examples;
 
-use crabflow::workflow;
+use crabflow::{workflow, Result};
 
 #[workflow]
 fn example() {
     #[task]
-    fn a() {
+    async fn a() -> Result {
         println!("a");
+        Ok(())
     }
 
-    #[task]
-    fn b() {
+    #[task(depends_on = a)]
+    async fn b() -> Result {
         println!("b");
+        Ok(())
     }
 
-    #[task]
-    fn c() {
+    #[task(depends_on = b)]
+    async fn c() -> Result {
         println!("c");
+        Ok(())
     }
 }
