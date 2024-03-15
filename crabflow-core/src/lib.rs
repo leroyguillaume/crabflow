@@ -3,18 +3,6 @@ use std::{cmp::Ordering, collections::BTreeSet};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-pub struct TasksChain {
-    pub next: Option<Box<Self>>,
-    pub tasks: BTreeSet<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Workflow {
-    pub chain: TasksChain,
-    pub id: String,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct TaskDesc {
     pub id: String,
     pub next: BTreeSet<TaskDesc>,
