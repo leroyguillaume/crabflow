@@ -1,4 +1,4 @@
-pub use crabflow_derive::*;
+pub use crabflow_dsl::*;
 
 pub mod clap {
     pub use clap::*;

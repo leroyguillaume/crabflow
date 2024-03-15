@@ -10,7 +10,7 @@ proc-macro = true
 
 [package]
 description = "CrabFlow macros"
-name = "crabflow-derive"
+name = "crabflow-dsl"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

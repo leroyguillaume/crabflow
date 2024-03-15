@@ -102,7 +102,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crabflow-core",
- "crabflow-derive",
+ "crabflow-dsl",
 ]
 
 [[package]]
@@ -113,7 +113,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "crabflow-derive"
+name = "crabflow-dsl"
 version = "0.1.0"
 dependencies = [
  "crabflow-core",

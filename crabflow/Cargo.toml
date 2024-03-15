@@ -1,7 +1,7 @@
 [dependencies]
 clap = {version = "4", features = ["env", "derive"]}
 crabflow-core = {path = "../crabflow-core"}
-crabflow-derive = {path = "../crabflow-derive"}
+crabflow-dsl = {path = "../crabflow-dsl"}
 
 [package]
 description = "CrabFlow crate"
