@@ -1,9 +1,15 @@
 use std::{
     fs::File,
+    future::Future,
+    marker::PhantomData,
     path::Path,
     process::{Command, Output},
 };
 
+use crabflow_common::db::{
+    DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
+    DefaultDatabasePool, DefaultDatabaseTransaction, WorkflowCreation,
+};
 use liquid::{object, Parser, ParserBuilder};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, instrument, Level};
@@ -24,7 +30,7 @@ pub trait DockerClient {
 }
 
 pub trait ImageBuilder {
-    fn build(&self, dir_path: &Path) -> Result;
+    fn build(&self, dir_path: &Path) -> impl Future<Output = Result>;
 }
 
 pub trait LiquidRenderer {
@@ -59,33 +65,63 @@ impl CargoClient for DefaultCargoClient {
     }
 }
 
-pub struct DefaultImageBuilder<CARGO: CargoClient, DOCKER: DockerClient, LIQUID: LiquidRenderer> {
+pub struct DefaultImageBuilder<
+    CARGO: CargoClient,
+    DB: DatabasePool<DBCONN, DBTX>,
+    DBCONN: DatabaseClient,
+    DBTX: DatabaseTransaction,
+    DOCKER: DockerClient,
+    LIQUID: LiquidRenderer,
+> {
     cargo: CARGO,
+    db: DB,
     docker: DOCKER,
     liquid: LIQUID,
     registry: Option<String>,
+    _dbconn: PhantomData<DBCONN>,
+    _dbtx: PhantomData<DBTX>,
 }
 
-impl DefaultImageBuilder<DefaultCargoClient, DefaultDockerClient, DefaultLiquidRenderer> {
-    pub fn init(opts: Options) -> Result<Self> {
+impl
+    DefaultImageBuilder<
+        DefaultCargoClient,
+        DefaultDatabasePool,
+        DefaultDatabaseConnection,
+        DefaultDatabaseTransaction<'_>,
+        DefaultDockerClient,
+        DefaultLiquidRenderer,
+    >
+{
+    #[instrument]
+    pub async fn init(opts: Options) -> Result<Self> {
+        let db = DefaultDatabasePool::init(opts.db.into()).await?;
         debug!("creating Liquid parser");
         let parser = ParserBuilder::with_stdlib().build()?;
         Ok(Self {
+            db,
             cargo: DefaultCargoClient,
             docker: DefaultDockerClient {
                 url: opts.docker_url,
             },
             liquid: DefaultLiquidRenderer { parser },
             registry: opts.registry,
+            _dbconn: PhantomData,
+            _dbtx: PhantomData,
         })
     }
 }
 
-impl<CARGO: CargoClient, DOCKER: DockerClient, LIQUID: LiquidRenderer> ImageBuilder
-    for DefaultImageBuilder<CARGO, DOCKER, LIQUID>
+impl<
+        CARGO: CargoClient,
+        DB: DatabasePool<DBCONN, DBTX>,
+        DBCONN: DatabaseClient,
+        DBTX: DatabaseTransaction,
+        DOCKER: DockerClient,
+        LIQUID: LiquidRenderer,
+    > ImageBuilder for DefaultImageBuilder<CARGO, DB, DBCONN, DBTX, DOCKER, LIQUID>
 {
     #[instrument(skip(self))]
-    fn build(&self, dir_path: &Path) -> Result {
+    async fn build(&self, dir_path: &Path) -> Result {
         let targets = self.cargo.load_targets(dir_path)?;
         let dockerfile_template = include_str!("../resources/main/Dockerfile.liquid");
         let dockerfile_path = dir_path.join("Dockerfile");
@@ -97,10 +133,25 @@ impl<CARGO: CargoClient, DOCKER: DockerClient, LIQUID: LiquidRenderer> ImageBuil
             } else {
                 target.clone()
             };
-            info!(tag, "building image");
+            info!(tag, target, "building image");
             self.docker.build(&target, &tag, dir_path)?;
             self.docker.push(&tag)?;
-            info!(tag, "image successfully built");
+            info!(tag, target, "image successfully built");
+            let mut db = self.db.acquire().await?;
+            if let Some(mut workflow) = db.workflow_by_target(&target).await? {
+                workflow.image = tag;
+                workflow.loaded = false;
+                db.update_workflow(&workflow).await?;
+                info!(tag = workflow.image, target, "workflow updated");
+            } else {
+                let creation = WorkflowCreation { image: tag, target };
+                let workflow = db.insert_workflow(creation).await?;
+                info!(
+                    tag = workflow.image,
+                    target = workflow.target,
+                    "workflow created"
+                );
+            }
         }
         Ok(())
     }
@@ -148,7 +199,7 @@ pub struct DefaultLiquidRenderer {
 }
 
 impl LiquidRenderer for DefaultLiquidRenderer {
-    #[instrument(level = Level::DEBUG, skip(self, template, targets))]
+    #[instrument(level = Level::DEBUG, skip(self))]
     fn render(&self, template: &str, path: &Path, targets: &[String]) -> Result {
         debug!("parsing template");
         let template = self.parser.parse(template)?;

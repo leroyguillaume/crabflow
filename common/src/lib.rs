@@ -16,3 +16,8 @@ pub fn init_tracing() {
         eprintln!("failed to initialize logging: {err}");
     }
 }
+
+#[cfg(feature = "clap")]
+pub mod clap;
+#[cfg(feature = "db")]
+pub mod db;

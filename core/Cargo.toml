@@ -1,4 +1,5 @@
 [dependencies]
+chrono = "0"
 serde = {version = "1", features = ["derive"]}
 
 [package]
