@@ -1,5 +1,5 @@
 [dependencies]
-crabflow-core = {path = "../crabflow-core"}
+crabflow-core = {path = "../core"}
 proc-macro2 = "1"
 quote = "1"
 serde_json = "1"
