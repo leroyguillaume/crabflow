@@ -164,11 +164,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "crabflow"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crabflow-core",
+ "crabflow-derive",
+]
+
+[[package]]
 name = "crabflow-common"
 version = "0.1.0"
 dependencies = [
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "crabflow-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "crabflow-derive"
+version = "0.1.0"
+dependencies = [
+ "crabflow-core",
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn",
 ]
 
 [[package]]

@@ -7,7 +7,7 @@ thiserror = "1"
 tracing = "0"
 
 [package]
-description = "Synchronizes crabflow workflows"
+description = "Synchronizes CrabFlow workflows"
 name = "crabflow-git-synchronizer"
 authors.workspace = true
 categories.workspace = true

@@ -1,10 +1,9 @@
 [dependencies]
-tracing = "0"
-tracing-subscriber = {version = "0", features = ["env-filter"]}
+serde = {version = "1", features = ["derive"]}
 
 [package]
-description = "Common utilities between CrabFlow crates"
-name = "crabflow-common"
+description = "CrabFlow core library"
+name = "crabflow-core"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "git-synchronizer", "image-builder"]
+members = ["common", "crabflow", "crabflow-core", "crabflow-derive", "git-synchronizer", "image-builder"]
 resolver = "2"
 
 [workspace.package]
