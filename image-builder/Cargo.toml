@@ -10,7 +10,7 @@ thiserror = "1"
 tracing = "0"
 
 [package]
-description = "Builds image of crabflow workflows"
+description = "Builds image of CrabFlow workflows"
 name = "crabflow-image-builder"
 authors.workspace = true
 categories.workspace = true
