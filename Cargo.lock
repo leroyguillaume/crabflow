@@ -315,6 +315,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "crabflow-builder"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crabflow-common",
+ "liquid",
+ "notify",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "crabflow-common"
 version = "0.1.0"
 dependencies = [
@@ -357,21 +372,6 @@ dependencies = [
  "git2",
  "signal-hook",
  "thiserror",
- "tracing",
-]
-
-[[package]]
-name = "crabflow-image-builder"
-version = "0.1.0"
-dependencies = [
- "clap",
- "crabflow-common",
- "liquid",
- "notify",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
  "tracing",
 ]
 

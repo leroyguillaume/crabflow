@@ -11,7 +11,7 @@ tracing = "0"
 
 [package]
 description = "Builds image of CrabFlow workflows"
-name = "crabflow-image-builder"
+name = "crabflow-builder"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
