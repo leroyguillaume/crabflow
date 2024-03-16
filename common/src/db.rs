@@ -1,6 +1,7 @@
 use std::future::Future;
 
-use crabflow_core::{Workflow, WorkflowState};
+use chrono::{DateTime, Utc};
+use crabflow_core::{Image, Workflow, WorkflowState};
 use futures::{Stream, StreamExt};
 use sqlx::{
     migrate, migrate::MigrateError, pool::PoolConnection, postgres::PgConnectOptions, query_file,
@@ -22,8 +23,8 @@ macro_rules! impl_client {
             }
 
             #[instrument(level = Level::DEBUG, skip(self))]
-            async fn insert_workflow(&mut self, creation: WorkflowCreation) -> Result<Workflow> {
-                insert_workflow(creation, &mut self.0).await
+            async fn insert_workflow(&mut self, img: &Image) -> Result<Workflow> {
+                insert_workflow(&img, &mut self.0).await
             }
 
             #[instrument(level = Level::DEBUG, skip(self))]
@@ -57,12 +58,6 @@ pub enum Error {
     ),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WorkflowCreation {
-    pub image: String,
-    pub target: String,
-}
-
 pub trait DatabaseClient: Send + Sync {
     fn all_workflows(
         &mut self,
@@ -70,10 +65,7 @@ pub trait DatabaseClient: Send + Sync {
 
     fn delete_workflow(&mut self, id: &str) -> impl Future<Output = Result<bool>>;
 
-    fn insert_workflow(
-        &mut self,
-        creation: WorkflowCreation,
-    ) -> impl Future<Output = Result<Workflow>>;
+    fn insert_workflow(&mut self, img: &Image) -> impl Future<Output = Result<Workflow>>;
 
     fn update_workflow(&mut self, workflow: &Workflow) -> impl Future<Output = Result<bool>>;
 
@@ -144,6 +136,26 @@ impl DatabaseTransaction for DefaultDatabaseTransaction<'_> {
     }
 }
 
+struct WorkflowRecord {
+    pub created_at: DateTime<Utc>,
+    pub tag: String,
+    pub target: String,
+    pub state: WorkflowState,
+}
+
+impl From<WorkflowRecord> for Workflow {
+    fn from(rec: WorkflowRecord) -> Self {
+        Self {
+            created_at: rec.created_at,
+            img: Image {
+                tag: rec.tag,
+                target: rec.target,
+            },
+            state: rec.state,
+        }
+    }
+}
+
 async fn all_workflows<
     'a,
     A: Acquire<'a, Database = Postgres, Connection = &'a mut PgConnection>,
@@ -153,9 +165,12 @@ async fn all_workflows<
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
     debug!("fetching all workflows");
-    let workflows = query_file_as!(Workflow, "resources/main/db/queries/all-workflows.sql",)
-        .fetch(conn)
-        .map(|row| row.map(Workflow::from).map_err(Error::from));
+    let workflows = query_file_as!(
+        WorkflowRecord,
+        "resources/main/db/queries/all-workflows.sql",
+    )
+    .fetch(conn)
+    .map(|row| row.map(Workflow::from).map_err(Error::from));
     Ok(workflows)
 }
 
@@ -179,21 +194,21 @@ async fn insert_workflow<
     'a,
     A: Acquire<'a, Database = Postgres, Connection = &'a mut PgConnection>,
 >(
-    creation: WorkflowCreation,
+    img: &Image,
     conn: A,
 ) -> Result<Workflow> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
     debug!("inserting workflow");
-    let record = query_file_as!(
-        Workflow,
+    let rec = query_file_as!(
+        WorkflowRecord,
         "resources/main/db/queries/insert-workflow.sql",
-        creation.target,
-        creation.image,
+        &img.target,
+        &img.tag,
     )
     .fetch_one(conn)
     .await?;
-    Ok(record)
+    Ok(rec.into())
 }
 
 async fn update_workflow<
@@ -206,15 +221,15 @@ async fn update_workflow<
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
     debug!("updating workflow");
-    let record = query_file!(
+    let rec = query_file!(
         "resources/main/db/queries/update-workflow.sql",
-        workflow.target,
-        workflow.image,
+        workflow.img.target,
+        workflow.img.tag,
         workflow.state as WorkflowState,
     )
     .execute(conn)
     .await?;
-    Ok(record.rows_affected() > 0)
+    Ok(rec.rows_affected() > 0)
 }
 
 async fn workflow_by_target<
@@ -228,7 +243,7 @@ async fn workflow_by_target<
     let conn = conn.acquire().await?;
     debug!("fetching workflow");
     let workflow = query_file_as!(
-        Workflow,
+        WorkflowRecord,
         "resources/main/db/queries/workflow-by-target.sql",
         target
     )

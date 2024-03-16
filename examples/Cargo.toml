@@ -1,5 +1,5 @@
-[dependencies]
-crabflow = {path = "../crabflow"}
+[dependencies.crabflow]
+git = "https://github.com/leroyguillaume/crabflow"
 
 [package]
 edition = "2021"

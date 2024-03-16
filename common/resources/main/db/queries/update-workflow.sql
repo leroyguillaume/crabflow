@@ -1,6 +1,6 @@
 UPDATE workflow
 SET
-    image = $2,
+    tag = $2,
     state = $3
 WHERE
     target = $1

@@ -1,7 +1,7 @@
 SELECT
     created_at,
     target,
-    image,
+    tag,
     state AS "state: WorkflowState"
 FROM workflow
 WHERE target = $1;

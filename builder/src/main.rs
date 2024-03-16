@@ -4,7 +4,7 @@ use std::{
     string::FromUtf8Error,
 };
 
-use builder::{DefaultImageBuilder, ImageBuilder};
+use builder::{Builder, DefaultBuilder, LocalBuilder};
 use clap::Parser;
 use crabflow_common::{clap::DatabaseOptions, init_tracing};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
@@ -69,7 +69,16 @@ enum Error {
 #[command(version)]
 struct Args {
     #[command(flatten)]
-    opts: Options,
+    builder: BuilderOptions,
+    #[command(flatten)]
+    db: DatabaseOptions,
+    #[arg(
+        short,
+        long,
+        env = "LOCAL",
+        help = "Don't push images and don't create/update workflow in database"
+    )]
+    local: bool,
     #[arg(
         env = "WORKFLOWS_DIR",
         help = "Path to directory that contains workflows"
@@ -80,9 +89,7 @@ struct Args {
 }
 
 #[derive(clap::Args, Clone, Debug, Eq, PartialEq)]
-struct Options {
-    #[command(flatten)]
-    db: DatabaseOptions,
+struct BuilderOptions {
     #[arg(
         long,
         env = "DOCKER_URL",
@@ -107,9 +114,9 @@ async fn main() {
     exit(rc);
 }
 
-async fn run(args: Args) -> Result {
-    let builder = DefaultImageBuilder::init(args.opts).await?;
-    if args.watch {
+async fn build<B: Builder>(watch: bool, builder: B) -> Result {
+    if watch {
+        let path = builder.path();
         let (tx, mut rx) = channel(1);
         debug!("creating file system watcher");
         let mut watcher = notify::recommended_watcher({
@@ -128,15 +135,15 @@ async fn run(args: Args) -> Result {
                 }
             }
         })?;
-        debug!(path = %args.path.display(), "starting file system watcher");
-        watcher.watch(&args.path, RecursiveMode::Recursive)?;
+        debug!(path = %path.display(), "starting file system watcher");
+        watcher.watch(path, RecursiveMode::Recursive)?;
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
         info!("builder started");
         loop {
             select! {
                 _ = rx.recv() => {
-                    if let Err(err) = builder.build(&args.path).await {
+                    if let Err(err) = builder.build().await {
                         error!("{err}");
                     }
                 }
@@ -151,9 +158,19 @@ async fn run(args: Args) -> Result {
             }
         }
         info!("builder stopped");
-        Ok(())
     } else {
-        builder.build(&args.path).await
+        builder.build().await?;
+    }
+    Ok(())
+}
+
+async fn run(args: Args) -> Result {
+    if args.local {
+        let builder = LocalBuilder::init(args.path, args.builder)?;
+        build(args.watch, builder).await
+    } else {
+        let builder = DefaultBuilder::init(args.path, args.builder, args.db).await?;
+        build(args.watch, builder).await
     }
 }
 

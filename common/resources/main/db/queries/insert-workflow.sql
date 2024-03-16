@@ -1,7 +1,7 @@
-INSERT INTO workflow (target, image)
+INSERT INTO workflow (target, tag)
 VALUES ($1, $2)
 RETURNING
     created_at,
     target,
-    image,
+    tag,
     state AS "state: WorkflowState";
