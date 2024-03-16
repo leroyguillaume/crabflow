@@ -1,6 +1,6 @@
 SELECT
-    created_at AS workflow_created_at,
-    target AS workflow_target,
-    image AS workflow_image,
-    loaded AS workflow_loaded
+    created_at,
+    target,
+    image,
+    state AS "state: WorkflowState"
 FROM workflow;

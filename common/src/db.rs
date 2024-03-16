@@ -1,7 +1,6 @@
 use std::future::Future;
 
-use chrono::{DateTime, Utc};
-use crabflow_core::Workflow;
+use crabflow_core::{Workflow, WorkflowState};
 use futures::{Stream, StreamExt};
 use sqlx::{
     migrate, migrate::MigrateError, pool::PoolConnection, postgres::PgConnectOptions, query_file,
@@ -145,24 +144,6 @@ impl DatabaseTransaction for DefaultDatabaseTransaction<'_> {
     }
 }
 
-struct WorkflowRecord {
-    workflow_created_at: DateTime<Utc>,
-    workflow_image: String,
-    workflow_loaded: bool,
-    workflow_target: String,
-}
-
-impl From<WorkflowRecord> for Workflow {
-    fn from(rec: WorkflowRecord) -> Self {
-        Self {
-            created_at: rec.workflow_created_at,
-            image: rec.workflow_image,
-            loaded: rec.workflow_loaded,
-            target: rec.workflow_target,
-        }
-    }
-}
-
 async fn all_workflows<
     'a,
     A: Acquire<'a, Database = Postgres, Connection = &'a mut PgConnection>,
@@ -172,12 +153,9 @@ async fn all_workflows<
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
     debug!("fetching all workflows");
-    let workflows = query_file_as!(
-        WorkflowRecord,
-        "resources/main/db/queries/all-workflows.sql",
-    )
-    .fetch(conn)
-    .map(|row| row.map(Workflow::from).map_err(Error::from));
+    let workflows = query_file_as!(Workflow, "resources/main/db/queries/all-workflows.sql",)
+        .fetch(conn)
+        .map(|row| row.map(Workflow::from).map_err(Error::from));
     Ok(workflows)
 }
 
@@ -208,14 +186,14 @@ async fn insert_workflow<
     let conn = conn.acquire().await?;
     debug!("inserting workflow");
     let record = query_file_as!(
-        WorkflowRecord,
+        Workflow,
         "resources/main/db/queries/insert-workflow.sql",
         creation.target,
         creation.image,
     )
     .fetch_one(conn)
     .await?;
-    Ok(record.into())
+    Ok(record)
 }
 
 async fn update_workflow<
@@ -232,7 +210,7 @@ async fn update_workflow<
         "resources/main/db/queries/update-workflow.sql",
         workflow.target,
         workflow.image,
-        workflow.loaded,
+        workflow.state as WorkflowState,
     )
     .execute(conn)
     .await?;
@@ -250,7 +228,7 @@ async fn workflow_by_target<
     let conn = conn.acquire().await?;
     debug!("fetching workflow");
     let workflow = query_file_as!(
-        WorkflowRecord,
+        Workflow,
         "resources/main/db/queries/workflow-by-target.sql",
         target
     )

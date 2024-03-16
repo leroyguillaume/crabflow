@@ -10,9 +10,10 @@ use crabflow_common::db::{
     DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
     DefaultDatabasePool, DefaultDatabaseTransaction, WorkflowCreation,
 };
+use crabflow_core::WorkflowState;
 use liquid::{object, Parser, ParserBuilder};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument, warn, Level};
 
 use crate::{Error, Options, Result};
 
@@ -140,9 +141,15 @@ impl<
             let mut db = self.db.acquire().await?;
             if let Some(mut workflow) = db.workflow_by_target(&target).await? {
                 workflow.image = tag;
-                workflow.loaded = false;
-                db.update_workflow(&workflow).await?;
-                info!(tag = workflow.image, target, "workflow updated");
+                workflow.state = WorkflowState::Created;
+                if db.update_workflow(&workflow).await? {
+                    info!(tag = workflow.image, target, "workflow updated");
+                } else {
+                    warn!(
+                        tag = workflow.image,
+                        target, "workflow has not been updated because it's locked"
+                    );
+                }
             } else {
                 let creation = WorkflowCreation { image: tag, target };
                 let workflow = db.insert_workflow(creation).await?;

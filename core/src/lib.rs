@@ -10,10 +10,11 @@ pub struct SequenceDesc {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "db", derive(sqlx::FromRow))]
 pub struct Workflow {
     pub created_at: DateTime<Utc>,
     pub image: String,
-    pub loaded: bool,
+    pub state: WorkflowState,
     pub target: String,
 }
 
@@ -21,4 +22,16 @@ pub struct Workflow {
 pub struct WorkflowDesc {
     pub id: String,
     pub seq: SequenceDesc,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "db", derive(sqlx::Type))]
+#[cfg_attr(
+    feature = "db",
+    sqlx(type_name = "workflow_state", rename_all = "snake_case")
+)]
+pub enum WorkflowState {
+    Created,
+    Loaded,
+    Loading,
 }

@@ -1,6 +1,7 @@
 [dependencies]
 clap = {version = "4", features = ["derive", "env"]}
 crabflow-common = {path = "../common", features = ["clap", "db"]}
+crabflow-core = {path = "../core"}
 liquid = "0"
 notify = "6"
 serde = {version = "1", features = ["derive"]}

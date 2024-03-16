@@ -320,6 +320,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "crabflow-common",
+ "crabflow-core",
  "liquid",
  "notify",
  "serde",
@@ -333,7 +334,6 @@ dependencies = [
 name = "crabflow-common"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "clap",
  "crabflow-core",
  "futures",
@@ -350,6 +350,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "sqlx",
 ]
 
 [[package]]

@@ -1,6 +1,10 @@
 [dependencies]
 chrono = "0"
 serde = {version = "1", features = ["derive"]}
+sqlx = {version = "0", optional = true}
+
+[features]
+db = ["dep:sqlx"]
 
 [package]
 description = "CrabFlow core library"
