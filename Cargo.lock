@@ -376,6 +376,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "crabflow-scheduler"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crabflow-common",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "crc"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

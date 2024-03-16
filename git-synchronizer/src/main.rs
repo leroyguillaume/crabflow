@@ -42,11 +42,11 @@ struct Args {
     #[arg(
         short,
         long,
-        env = "EVERY",
+        env = "DELAY",
         help = "Number of seconds between each git pull",
         default_value_t = 10
     )]
-    every: u64,
+    delay: u64,
     #[arg(
         short,
         long,
@@ -83,7 +83,7 @@ fn main() {
 }
 
 fn run(args: Args) -> Result {
-    let every = Duration::from_secs(args.every);
+    let delay = Duration::from_secs(args.delay);
     let rev = args.rev.into();
     let git = DefaultGitClient::init(&args.repository, &rev, &args.path)?;
     let over = Arc::new(AtomicBool::default());
@@ -91,7 +91,7 @@ fn run(args: Args) -> Result {
     signal_hook::flag::register(signal_hook::consts::SIGTERM, over.clone())?;
     info!("synchronizer started");
     while !over.load(Ordering::Relaxed) {
-        sleep(every);
+        sleep(delay);
         git.pull()?;
     }
     info!("synchronizer stopped");

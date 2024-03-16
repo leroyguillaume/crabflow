@@ -64,7 +64,7 @@ pub struct WorkflowCreation {
     pub target: String,
 }
 
-pub trait DatabaseClient {
+pub trait DatabaseClient: Send + Sync {
     fn all_workflows(
         &mut self,
     ) -> impl Future<Output = Result<impl Stream<Item = Result<Workflow>>>>;
