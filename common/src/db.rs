@@ -122,7 +122,7 @@ pub trait DatabaseTransaction: DatabaseClient {
 pub struct DefaultDatabasePool(PgPool);
 
 impl DefaultDatabasePool {
-    #[instrument]
+    #[instrument(skip(opts))]
     pub async fn init(opts: PgConnectOptions) -> Result<Self> {
         info!("initializing database pool");
         let db = PgPool::connect_with(opts).await?;
