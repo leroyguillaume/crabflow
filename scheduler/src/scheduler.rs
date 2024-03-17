@@ -1,15 +1,12 @@
 use std::{future::Future, marker::PhantomData};
 
-use crabflow_common::{
-    clap::DatabaseOptions,
-    db::{
-        DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
-        DefaultDatabasePool, DefaultDatabaseTransaction,
-    },
+use crabflow_common::db::{
+    DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
+    DefaultDatabasePool, DefaultDatabaseTransaction,
 };
 use tracing::instrument;
 
-use crate::Result;
+use crate::{Args, Result};
 
 pub trait Scheduler: Send + Sync {
     fn schedule(&self) -> impl Future<Output = Result>;
@@ -28,9 +25,9 @@ pub struct DefaultScheduler<
 impl
     DefaultScheduler<DefaultDatabasePool, DefaultDatabaseConnection, DefaultDatabaseTransaction<'_>>
 {
-    #[instrument]
-    pub async fn init(opts: DatabaseOptions) -> Result<Self> {
-        let db = DefaultDatabasePool::init(opts.into()).await?;
+    #[instrument(skip(args))]
+    pub async fn init(args: Args) -> Result<Self> {
+        let db = DefaultDatabasePool::init(args.db.into()).await?;
         Ok(Self {
             _db: db,
             _dbconn: PhantomData,

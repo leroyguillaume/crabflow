@@ -13,7 +13,7 @@ use clap::Parser;
 use crabflow_common::init_tracing;
 use tracing::{error, info};
 
-use crate::git::{DefaultGitClient, GitClient};
+use crate::git::{DefaultSynchronizer, Synchronizer};
 
 type Result<T = ()> = std::result::Result<T, Error>;
 
@@ -84,15 +84,14 @@ fn main() {
 
 fn run(args: Args) -> Result {
     let delay = Duration::from_secs(args.delay);
-    let rev = args.rev.into();
-    let git = DefaultGitClient::init(&args.repository, &rev, &args.path)?;
+    let git = DefaultSynchronizer::init(args)?;
     let over = Arc::new(AtomicBool::default());
     signal_hook::flag::register(signal_hook::consts::SIGINT, over.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGTERM, over.clone())?;
     info!("synchronizer started");
     while !over.load(Ordering::Relaxed) {
+        git.synchronize()?;
         sleep(delay);
-        git.pull()?;
     }
     info!("synchronizer stopped");
     Ok(())

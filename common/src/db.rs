@@ -8,7 +8,7 @@ use sqlx::{
     postgres::PgConnectOptions,
     query, query_as, Acquire, PgConnection, PgPool, Postgres, Transaction,
 };
-use tracing::{debug, info, instrument, trace, Level};
+use tracing::{debug, debug_span, info, instrument, trace, Instrument, Level};
 
 macro_rules! impl_client {
     ($ty:ty) => {
@@ -18,24 +18,33 @@ macro_rules! impl_client {
                 all_workflows(&mut self.0).await
             }
 
-            #[instrument(level = Level::DEBUG, skip(self))]
             async fn delete_workflow(&mut self, id: &str) -> Result<bool> {
-                delete_workflow(id, &mut self.0).await
+                let span = debug_span!("delete_workflow", workflow.id = id);
+                delete_workflow(id, &mut self.0).instrument(span).await
             }
 
-            #[instrument(level = Level::DEBUG, skip(self))]
             async fn insert_workflow(&mut self, image: &Image) -> Result<Workflow> {
-                insert_workflow(&image, &mut self.0).await
+                let span = debug_span!(
+                    "delete_workflow",
+                    workflow.image.tag = image.tag,
+                    workflow.image.target = image.target
+                );
+                insert_workflow(&image, &mut self.0).instrument(span).await
             }
 
-            #[instrument(level = Level::DEBUG, skip(self))]
             async fn update_workflow(&mut self, workflow: &Workflow) -> Result<bool> {
-                update_workflow(workflow, &mut self.0).await
+                let span =
+                    debug_span!("delete_workflow", workflow.image.tag, workflow.image.target,);
+                update_workflow(workflow, &mut self.0)
+                    .instrument(span)
+                    .await
             }
 
-            #[instrument(level = Level::DEBUG, skip(self))]
             async fn workflow_by_target(&mut self, target: &str) -> Result<Option<Workflow>> {
-                workflow_by_target(target, &mut self.0).await
+                let span = debug_span!("workflow_by_target", workflow.image.target = target);
+                workflow_by_target(target, &mut self.0)
+                    .instrument(span)
+                    .await
             }
         }
     };

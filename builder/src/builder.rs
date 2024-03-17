@@ -13,7 +13,7 @@ use crabflow_common::db::{
 use crabflow_core::{Image, WorkflowState};
 use liquid::{object, Parser, ParserBuilder};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, info, instrument, warn, Level};
+use tracing::{debug, debug_span, error, info, instrument, warn, Level};
 
 use crate::{Args, Error, Result};
 
@@ -25,7 +25,7 @@ pub trait CargoClient {
 }
 
 pub trait DockerClient {
-    fn build(&self, target: &str, tag: &str, path: &Path) -> Result;
+    fn build(&self, image: &Image, workflows_dir: &Path) -> Result;
 
     fn push(&self, tag: &str) -> Result;
 }
@@ -41,11 +41,12 @@ pub trait Renderer {
 pub struct DefaultCargoClient;
 
 impl CargoClient for DefaultCargoClient {
-    #[instrument(level = Level::DEBUG, skip(self))]
-    fn load_targets(&self, dir_path: &Path) -> Result<Vec<String>> {
+    fn load_targets(&self, workflows_dir: &Path) -> Result<Vec<String>> {
+        let span = debug_span!("load_targets", workflows_dir = %workflows_dir.display());
+        let _enter = span.enter();
         debug!("running cargo");
         let output = Command::new(CMD_CARGO)
-            .current_dir(dir_path)
+            .current_dir(workflows_dir)
             .arg("read-manifest")
             .output()?;
         let stdout = command_stdout(CMD_CARGO, output)?;
@@ -92,7 +93,7 @@ impl
         DefaultRenderer,
     >
 {
-    #[instrument]
+    #[instrument(skip(args))]
     pub async fn init(args: Args) -> Result<Self> {
         let run_kind = if args.build_only {
             RunKind::BuildOnly
@@ -137,37 +138,51 @@ impl<
             } else {
                 target.clone()
             };
-            info!(tag, target, "building image");
-            self.docker.build(&target, &tag, &self.path)?;
-            info!(tag, target, "image successfully built");
+            let image = Image { tag, target };
+            info!(
+                workflow.image.tag = image.tag,
+                workflow.image.target = image.target,
+                "building image"
+            );
+            self.docker.build(&image, &self.path)?;
+            info!(
+                workflow.image.tag = image.tag,
+                workflow.image.target = image.target,
+                "image successfully built"
+            );
             if let RunKind::Full { db, .. } = &self.run_kind {
-                info!(tag, target, "pushing image");
-                self.docker.push(&tag)?;
-                info!(tag, target, "image successfully pushed");
-                let image = Image { tag, target };
+                info!(
+                    workflow.image.tag = image.tag,
+                    workflow.image.target = image.target,
+                    "pushing image"
+                );
+                self.docker.push(&image.tag)?;
+                info!(
+                    workflow.image.tag = image.tag,
+                    workflow.image.target = image.target,
+                    "image successfully pushed"
+                );
                 let mut db = db.acquire().await?;
                 if let Some(mut workflow) = db.workflow_by_target(&image.target).await? {
                     workflow.image = image;
                     workflow.state = WorkflowState::Created;
                     if db.update_workflow(&workflow).await? {
                         info!(
-                            tag = workflow.image.tag,
-                            target = workflow.image.target,
-                            "workflow updated"
+                            workflow.image.tag,
+                            workflow.image.target, "workflow updated"
                         );
                     } else {
                         warn!(
-                            tag = workflow.image.tag,
-                            target = workflow.image.target,
+                            workflow.image.tag,
+                            workflow.image.target,
                             "workflow has not been updated because it's locked"
                         );
                     }
                 } else {
                     let workflow = db.insert_workflow(&image).await?;
                     info!(
-                        tag = workflow.image.tag,
-                        target = workflow.image.target,
-                        "workflow created"
+                        workflow.image.tag,
+                        workflow.image.target, "workflow created"
                     );
                 };
             }
@@ -181,26 +196,28 @@ pub struct DefaultDockerClient {
 }
 
 impl DockerClient for DefaultDockerClient {
-    #[instrument(level = Level::DEBUG, skip(self))]
-    fn build(&self, target: &str, tag: &str, dir_path: &Path) -> Result {
+    fn build(&self, image: &Image, workflows_dir: &Path) -> Result {
+        let span = debug_span!("build", cwd = %workflows_dir.display(), workflow.image.target = image.target, workflow.image.tag = image.tag);
+        let _enter = span.enter();
         debug!("running docker build");
         let output = Command::new(CMD_DOCKER)
-            .current_dir(dir_path)
+            .current_dir(workflows_dir)
             .arg("-H")
             .arg(&self.url)
             .arg("build")
             .arg("-t")
-            .arg(tag)
+            .arg(&image.tag)
             .arg("--target")
-            .arg(target)
+            .arg(&image.target)
             .arg(".")
             .output()?;
         command_stdout(CMD_DOCKER, output)?;
         Ok(())
     }
 
-    #[instrument(level = Level::DEBUG, skip(self))]
     fn push(&self, tag: &str) -> Result {
+        let span = debug_span!("push", workflow.image.tag = tag);
+        let _enter = span.enter();
         debug!("running docker push");
         let output = Command::new(CMD_DOCKER)
             .arg("-H")
@@ -218,7 +235,7 @@ pub struct DefaultRenderer {
 }
 
 impl Renderer for DefaultRenderer {
-    #[instrument(level = Level::DEBUG, skip(self))]
+    #[instrument(level = Level::DEBUG, skip(self, template, targets))]
     fn render(&self, template: &str, path: &Path, targets: &[String]) -> Result {
         debug!("parsing template");
         let template = self.parser.parse(template)?;

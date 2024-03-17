@@ -1,9 +1,7 @@
-use std::path::Path;
-
 use git2::{AutotagOption, BranchType, FetchOptions, Repository};
 use tracing::{debug, instrument, Level};
 
-use crate::{Error, Result, RevisionArg};
+use crate::{Args, Error, Result, RevisionArg};
 
 const REMOTE: &str = "origin";
 
@@ -26,26 +24,27 @@ impl From<RevisionArg> for Revision {
     }
 }
 
-pub trait GitClient {
-    fn pull(&self) -> Result;
+pub trait Synchronizer {
+    fn synchronize(&self) -> Result;
 }
 
-pub struct DefaultGitClient {
+pub struct DefaultSynchronizer {
     refspec: String,
     repo: Repository,
 }
 
-impl DefaultGitClient {
-    #[instrument(level = Level::DEBUG)]
-    pub fn init(url: &str, rev: &Revision, path: &Path) -> Result<Self> {
-        let repo = if path.is_dir() {
+impl DefaultSynchronizer {
+    #[instrument(level = Level::DEBUG, skip(args))]
+    pub fn init(args: Args) -> Result<Self> {
+        let repo = if args.path.is_dir() {
             debug!("opening repository");
-            Repository::open(path)
+            Repository::open(&args.path)
         } else {
             debug!("cloning repository");
-            Repository::clone(url, path)
+            Repository::clone(&args.repository, &args.path)
         }?;
-        let refspec = match &rev {
+        let rev = Revision::from(args.rev);
+        let refspec = match rev {
             Revision::Branch(branch) => format!("refs/remotes/{REMOTE}/{branch}"),
             Revision::DefaultBranch => {
                 debug!("getting local branches");
@@ -57,15 +56,13 @@ impl DefaultGitClient {
             }
             Revision::Tag(tag) => format!("refs/tags/{tag}"),
         };
-        let git = Self { refspec, repo };
-        git.pull()?;
-        Ok(git)
+        Ok(Self { refspec, repo })
     }
 }
 
-impl GitClient for DefaultGitClient {
+impl Synchronizer for DefaultSynchronizer {
     #[instrument(skip(self))]
-    fn pull(&self) -> Result {
+    fn synchronize(&self) -> Result {
         debug!("getting remote");
         let mut remote = self.repo.find_remote(REMOTE)?;
         let mut opts = FetchOptions::new();

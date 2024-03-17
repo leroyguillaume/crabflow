@@ -58,8 +58,8 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result {
-    let scheduler = DefaultScheduler::init(args.db).await?;
     let delay = Duration::from_secs(args.delay);
+    let scheduler = DefaultScheduler::init(args).await?;
     let mut sigint = signal(SignalKind::interrupt())?;
     let mut sigterm = signal(SignalKind::terminate())?;
     info!("scheduler started");
