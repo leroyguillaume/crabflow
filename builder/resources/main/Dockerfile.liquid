@@ -1,4 +1,6 @@
-FROM rust:1-alpine AS build
+ARG VERSION=bookworm
+
+FROM rust:1-slim-$VERSION AS build
 
 WORKDIR /app
 
@@ -10,7 +12,7 @@ cp -r target/release /build
 EOF
 
 {% for target in targets %}
-FROM alpine:3 AS {{ target }}
+FROM debian:$VERSION-slim AS {{ target }}
 
 COPY --from=build /build/{{ target }} /usr/local/bin/{{ target }}
 

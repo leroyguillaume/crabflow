@@ -21,7 +21,7 @@ pub struct DatabaseOptions {
         env = "DATABASE_PASSWORD",
         help = "Database password"
     )]
-    pub password: String,
+    pub password: Option<String>,
     #[arg(
         long = "database-port",
         env = "DATABASE_PORT",
@@ -52,11 +52,15 @@ impl Debug for DatabaseOptions {
 #[cfg(feature = "db")]
 impl From<DatabaseOptions> for sqlx::postgres::PgConnectOptions {
     fn from(opts: DatabaseOptions) -> Self {
-        Self::new()
+        let pg_opts = Self::new()
             .database(&opts.name)
             .host(&opts.host)
-            .password(&opts.password)
             .port(opts.port)
-            .username(&opts.user)
+            .username(&opts.user);
+        if let Some(password) = opts.password {
+            pg_opts.password(&password)
+        } else {
+            pg_opts
+        }
     }
 }

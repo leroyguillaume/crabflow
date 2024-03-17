@@ -70,7 +70,7 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
             use crabflow_internal::*;
 
             let args = Args::parse();
-            args.cmd.run(args.opts).await?;
+            args.run().await?;
             Ok(())
         }
 
@@ -90,6 +90,12 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
                 pub cmd: Command,
                 #[command(flatten)]
                 pub opts: DatabaseOptions,
+            }
+
+            impl Args {
+                pub async fn run(self) -> Result {
+                    self.cmd.run(self.opts).await
+                }
             }
 
             #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]

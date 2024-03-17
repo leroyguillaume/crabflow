@@ -294,7 +294,6 @@ dependencies = [
 [[package]]
 name = "crabflow"
 version = "0.1.0"
-source = "git+https://github.com/leroyguillaume/crabflow#77df11994d3d15b8dae599b7ddcf9fe2a684d06e"
 dependencies = [
  "anyhow",
  "clap",
@@ -308,8 +307,8 @@ dependencies = [
 [[package]]
 name = "crabflow-common"
 version = "0.1.0"
-source = "git+https://github.com/leroyguillaume/crabflow#77df11994d3d15b8dae599b7ddcf9fe2a684d06e"
 dependencies = [
+ "chrono",
  "clap",
  "crabflow-core",
  "futures",
@@ -323,7 +322,6 @@ dependencies = [
 [[package]]
 name = "crabflow-core"
 version = "0.1.0"
-source = "git+https://github.com/leroyguillaume/crabflow#77df11994d3d15b8dae599b7ddcf9fe2a684d06e"
 dependencies = [
  "chrono",
  "serde",
@@ -333,7 +331,6 @@ dependencies = [
 [[package]]
 name = "crabflow-dsl"
 version = "0.1.0"
-source = "git+https://github.com/leroyguillaume/crabflow#77df11994d3d15b8dae599b7ddcf9fe2a684d06e"
 dependencies = [
  "crabflow-core",
  "proc-macro2",

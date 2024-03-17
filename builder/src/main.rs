@@ -4,7 +4,7 @@ use std::{
     string::FromUtf8Error,
 };
 
-use builder::{Builder, DefaultBuilder, LocalBuilder};
+use builder::{Builder, DefaultBuilder};
 use clap::Parser;
 use crabflow_common::{clap::DatabaseOptions, init_tracing};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
@@ -68,28 +68,10 @@ enum Error {
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(version)]
 struct Args {
-    #[command(flatten)]
-    builder: BuilderOptions,
+    #[arg(long, env = "BUILD_ONLY", help = "Only build images")]
+    build_only: bool,
     #[command(flatten)]
     db: DatabaseOptions,
-    #[arg(
-        short,
-        long,
-        env = "LOCAL",
-        help = "Don't push images and don't create/update workflow in database"
-    )]
-    local: bool,
-    #[arg(
-        env = "WORKFLOWS_DIR",
-        help = "Path to directory that contains workflows"
-    )]
-    path: PathBuf,
-    #[arg(short, long, help = "Watch changes on workflows directory")]
-    watch: bool,
-}
-
-#[derive(clap::Args, Clone, Debug, Eq, PartialEq)]
-struct BuilderOptions {
     #[arg(
         long,
         env = "DOCKER_URL",
@@ -97,8 +79,15 @@ struct BuilderOptions {
         default_value = "unix:///var/run/docker.sock"
     )]
     docker_url: String,
+    #[arg(
+        env = "WORKFLOWS_DIR",
+        help = "Path to directory that contains workflows"
+    )]
+    path: PathBuf,
     #[arg(short, long, env = "REGISTRY", help = "Image registry")]
     registry: Option<String>,
+    #[arg(short, long, help = "Watch changes on workflows directory")]
+    watch: bool,
 }
 
 #[tokio::main]
@@ -114,9 +103,8 @@ async fn main() {
     exit(rc);
 }
 
-async fn build<B: Builder>(watch: bool, builder: B) -> Result {
-    if watch {
-        let path = builder.path();
+async fn run(args: Args) -> Result {
+    if args.watch {
         let (tx, mut rx) = channel(1);
         debug!("creating file system watcher");
         let mut watcher = notify::recommended_watcher({
@@ -135,10 +123,11 @@ async fn build<B: Builder>(watch: bool, builder: B) -> Result {
                 }
             }
         })?;
-        debug!(path = %path.display(), "starting file system watcher");
-        watcher.watch(path, RecursiveMode::Recursive)?;
+        debug!(path = %args.path.display(), "starting file system watcher");
+        watcher.watch(&args.path, RecursiveMode::Recursive)?;
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
+        let builder = DefaultBuilder::init(args).await?;
         info!("builder started");
         loop {
             select! {
@@ -159,19 +148,10 @@ async fn build<B: Builder>(watch: bool, builder: B) -> Result {
         }
         info!("builder stopped");
     } else {
+        let builder = DefaultBuilder::init(args).await?;
         builder.build().await?;
     }
     Ok(())
-}
-
-async fn run(args: Args) -> Result {
-    if args.local {
-        let builder = LocalBuilder::init(args.path, args.builder)?;
-        build(args.watch, builder).await
-    } else {
-        let builder = DefaultBuilder::init(args.path, args.builder, args.db).await?;
-        build(args.watch, builder).await
-    }
 }
 
 mod builder;

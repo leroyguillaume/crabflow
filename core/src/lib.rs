@@ -21,7 +21,7 @@ pub struct SequenceDesc {
 pub struct Workflow {
     pub created_at: DateTime<Utc>,
     #[cfg_attr(feature = "db", sqlx(flatten))]
-    pub img: Image,
+    pub image: Image,
     pub state: WorkflowState,
 }
 
