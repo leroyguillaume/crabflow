@@ -1,3 +1,3 @@
 #!/bin/bash
 
-cargo run -p crabflow-$1 -- $@
+cargo run -p crabflow-$1 -- ${@:2}

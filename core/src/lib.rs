@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "db", derive(sqlx::FromRow))]
 pub struct Image {
     pub tag: String,
     pub target: String,
@@ -16,8 +17,10 @@ pub struct SequenceDesc {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "db", derive(sqlx::FromRow))]
 pub struct Workflow {
     pub created_at: DateTime<Utc>,
+    #[cfg_attr(feature = "db", sqlx(flatten))]
     pub img: Image,
     pub state: WorkflowState,
 }

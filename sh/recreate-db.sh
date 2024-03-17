@@ -1,6 +1,6 @@
 #!/bin/bash
 
-export DATABASE_URL=$(grep DATABASE_URL .cargo/config.toml | cut -d = -f 2 | cut -d '"' -f 2)
+export DATABASE_URL=postgres://crabflow:crabflow@127.0.0.1/crablow
 
 sqlx database drop -yD $DATABASE_URL
 sqlx database create -D $DATABASE_URL

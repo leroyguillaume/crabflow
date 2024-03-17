@@ -1,6 +1,5 @@
 [env]
 DATABASE_PASSWORD = "crabflow"
-DATABASE_URL = "postgres://crabflow:crabflow@127.0.0.1/crabflow"
 LOG_FILTER = "debug"
 REGISTRY = "localhost:5000"
 WORKFLOWS_DIR = "examples"

@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use crabflow_core::{Image, Workflow, WorkflowState};
 use futures::{Stream, StreamExt};
 use sqlx::{
-    migrate, migrate::MigrateError, pool::PoolConnection, postgres::PgConnectOptions, query_file,
-    query_file_as, Acquire, PgConnection, PgPool, Postgres, Transaction,
+    migrate::MigrateError, pool::PoolConnection, postgres::PgConnectOptions, query, query_as,
+    Acquire, PgConnection, PgPool, Postgres, Transaction,
 };
 use tracing::{debug, info, instrument, trace, Level};
 
@@ -95,7 +95,9 @@ impl DefaultDatabasePool {
         info!("initializing database pool");
         let pool = PgPool::connect_with(opts).await?;
         info!("running database migrations");
-        migrate!("resources/main/db/migrations").run(&pool).await?;
+        sqlx::migrate!("resources/main/db/migrations")
+            .run(&pool)
+            .await?;
         Ok(DefaultDatabasePool(pool))
     }
 }
@@ -164,13 +166,11 @@ async fn all_workflows<
 ) -> Result<impl Stream<Item = Result<Workflow>> + 'a> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/all-workflows.sql");
     debug!("fetching all workflows");
-    let workflows = query_file_as!(
-        WorkflowRecord,
-        "resources/main/db/queries/all-workflows.sql",
-    )
-    .fetch(conn)
-    .map(|row| row.map(Workflow::from).map_err(Error::from));
+    let workflows = query_as(sql)
+        .fetch(conn)
+        .map(|row| row.map_err(Error::from));
     Ok(workflows)
 }
 
@@ -183,11 +183,10 @@ async fn delete_workflow<
 ) -> Result<bool> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/delete-workflow.sql");
     debug!("deleting workflow workflow");
-    let record = query_file!("resources/main/db/queries/delete-workflow.sql", id,)
-        .execute(conn)
-        .await?;
-    Ok(record.rows_affected() > 0)
+    let res = query(sql).bind(id).execute(conn).await?;
+    Ok(res.rows_affected() > 0)
 }
 
 async fn insert_workflow<
@@ -199,16 +198,14 @@ async fn insert_workflow<
 ) -> Result<Workflow> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/insert-workflow.sql");
     debug!("inserting workflow");
-    let rec = query_file_as!(
-        WorkflowRecord,
-        "resources/main/db/queries/insert-workflow.sql",
-        &img.target,
-        &img.tag,
-    )
-    .fetch_one(conn)
-    .await?;
-    Ok(rec.into())
+    let workflow = query_as(sql)
+        .bind(&img.target)
+        .bind(&img.tag)
+        .fetch_one(conn)
+        .await?;
+    Ok(workflow)
 }
 
 async fn update_workflow<
@@ -220,16 +217,15 @@ async fn update_workflow<
 ) -> Result<bool> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/update-workflow.sql");
     debug!("updating workflow");
-    let rec = query_file!(
-        "resources/main/db/queries/update-workflow.sql",
-        workflow.img.target,
-        workflow.img.tag,
-        workflow.state as WorkflowState,
-    )
-    .execute(conn)
-    .await?;
-    Ok(rec.rows_affected() > 0)
+    let res = query(sql)
+        .bind(&workflow.img.target)
+        .bind(&workflow.img.tag)
+        .bind(workflow.state)
+        .execute(conn)
+        .await?;
+    Ok(res.rows_affected() > 0)
 }
 
 async fn workflow_by_target<
@@ -241,14 +237,8 @@ async fn workflow_by_target<
 ) -> Result<Option<Workflow>> {
     trace!("acquiring database connection");
     let conn = conn.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/workflow-by-target.sql");
     debug!("fetching workflow");
-    let workflow = query_file_as!(
-        WorkflowRecord,
-        "resources/main/db/queries/workflow-by-target.sql",
-        target
-    )
-    .fetch_optional(conn)
-    .await?
-    .map(Workflow::from);
+    let workflow = query_as(sql).bind(target).fetch_optional(conn).await?;
     Ok(workflow)
 }
