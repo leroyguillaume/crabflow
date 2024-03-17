@@ -1,6 +1,8 @@
 #!/bin/bash
 
-export DATABASE_URL=postgres://crabflow:crabflow@127.0.0.1/crablow
+set -e
+
+export DATABASE_URL=postgres://crabflow:crabflow@127.0.0.1/crabflow
 
 sqlx database drop -yD $DATABASE_URL
 sqlx database create -D $DATABASE_URL
