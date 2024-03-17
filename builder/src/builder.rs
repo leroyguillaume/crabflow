@@ -21,7 +21,7 @@ const CMD_CARGO: &str = "cargo";
 const CMD_DOCKER: &str = "docker";
 
 pub trait CargoClient {
-    fn load_targets(&self, dir_path: &Path) -> Result<Vec<String>>;
+    fn load_targets(&self, workflows_dir: &Path) -> Result<Vec<String>>;
 }
 
 pub trait DockerClient {
@@ -166,7 +166,7 @@ impl<
                 if let Some(mut workflow) = db.workflow_by_target(&image.target).await? {
                     workflow.image = image;
                     workflow.state = WorkflowState::Created;
-                    if db.update_workflow(&workflow).await? {
+                    if db.update_workflow_safely(&workflow).await? {
                         info!(
                             workflow.image.tag,
                             workflow.image.target, "workflow updated"

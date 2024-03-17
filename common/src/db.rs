@@ -1,6 +1,6 @@
 use std::{future::Future, path::Path};
 
-use crabflow_core::{Image, Workflow};
+use crabflow_core::{Image, Workflow, WorkflowState};
 use futures::{Stream, StreamExt};
 use sqlx::{
     migrate::{MigrateError, Migrator},
@@ -25,7 +25,7 @@ macro_rules! impl_client {
 
             async fn insert_workflow(&mut self, image: &Image) -> Result<Workflow> {
                 let span = debug_span!(
-                    "delete_workflow",
+                    "insert_workflow",
                     workflow.image.tag = image.tag,
                     workflow.image.target = image.target
                 );
@@ -34,8 +34,19 @@ macro_rules! impl_client {
 
             async fn update_workflow(&mut self, workflow: &Workflow) -> Result<bool> {
                 let span =
-                    debug_span!("delete_workflow", workflow.image.tag, workflow.image.target,);
-                update_workflow(workflow, &mut self.0)
+                    debug_span!("update_workflow", workflow.image.tag, workflow.image.target,);
+                update_workflow(workflow, false, &mut self.0)
+                    .instrument(span)
+                    .await
+            }
+
+            async fn update_workflow_safely(&mut self, workflow: &Workflow) -> Result<bool> {
+                let span = debug_span!(
+                    "update_workflow_safely",
+                    workflow.image.tag,
+                    workflow.image.target,
+                );
+                update_workflow(workflow, true, &mut self.0)
                     .instrument(span)
                     .await
             }
@@ -60,6 +71,12 @@ pub enum Error {
         #[source]
         sqlx::Error,
     ),
+    #[error("json error: {0}")]
+    Json(
+        #[from]
+        #[source]
+        serde_json::Error,
+    ),
     #[error("database migration error: {0}")]
     Migrate(
         #[from]
@@ -78,6 +95,9 @@ pub trait DatabaseClient: Send + Sync {
     fn insert_workflow(&mut self, image: &Image) -> impl Future<Output = Result<Workflow>>;
 
     fn update_workflow(&mut self, workflow: &Workflow) -> impl Future<Output = Result<bool>>;
+
+    fn update_workflow_safely(&mut self, workflow: &Workflow)
+        -> impl Future<Output = Result<bool>>;
 
     fn workflow_by_target(
         &mut self,
@@ -207,16 +227,29 @@ async fn update_workflow<
     A: Acquire<'a, Database = Postgres, Connection = &'a mut PgConnection>,
 >(
     workflow: &Workflow,
+    safely: bool,
     db: A,
 ) -> Result<bool> {
     trace!("acquiring database connection");
     let db = db.acquire().await?;
-    let sql = include_str!("../resources/main/db/queries/update-workflow.sql");
+    let sql = if safely {
+        include_str!("../resources/main/db/queries/update-workflow.sql")
+    } else {
+        include_str!("../resources/main/db/queries/update-workflow-safely.sql")
+    };
+    let desc = match &workflow.state {
+        WorkflowState::Loaded(desc) => {
+            let value = serde_json::to_value(desc)?;
+            Some(value)
+        }
+        _ => None,
+    };
     debug!("updating workflow");
     let res = query(sql)
         .bind(&workflow.image.target)
         .bind(&workflow.image.tag)
-        .bind(workflow.state)
+        .bind(&workflow.state)
+        .bind(desc)
         .execute(db)
         .await?;
     Ok(res.rows_affected() > 0)

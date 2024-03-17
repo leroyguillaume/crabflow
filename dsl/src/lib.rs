@@ -59,7 +59,10 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
         use crabflow::{
             clap as clap,
             common as crabflow_common,
+            core as crabflow_core,
+            serde_json as serde_json,
             tokio as tokio,
+            tracing as tracing,
         };
 
         const WORKFLOW_JSON: &str = #json;
@@ -69,6 +72,7 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
             use clap::Parser;
             use crabflow_internal::*;
 
+            crabflow_common::init_tracing();
             let args = Args::parse();
             args.run().await?;
             Ok(())
@@ -79,7 +83,12 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
         mod crabflow_internal {
             use clap::{self, Parser, Subcommand};
             use crabflow::{Result, load_workflow,};
-            use crabflow_common::clap::DatabaseOptions;
+            use crabflow_common::{
+                clap::DatabaseOptions,
+                db::DefaultDatabasePool,
+            };
+            use crabflow_core::WorkflowDesc;
+            use tracing::debug;
 
             use super::*;
 
@@ -100,8 +109,11 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
 
             #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
             pub enum Command {
-                #[command(about = "Print JSON-encoded workflow")]
-                Json,
+                #[command(about = "Print JSON-encoded workflow descriptor")]
+                Json {
+                    #[arg(short, long, help = "Format JSON")]
+                    pretty: bool,
+                },
                 #[command(about = "Load workflow")]
                 Load,
                 #[command(subcommand, about = "Run task")]
@@ -111,11 +123,23 @@ pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
             impl Command {
                 pub async fn run(self, opts: DatabaseOptions) -> Result {
                     match self {
-                        Self::Json => {
-                            println!("{WORKFLOW_JSON}");
+                        Self::Json { pretty } => {
+                            if pretty {
+                                debug!("deserializing workflow descriptior");
+                                let desc: WorkflowDesc = serde_json::from_str(WORKFLOW_JSON)?;
+                                debug!("serializing workflow descriptor into pretty JSON");
+                                serde_json::to_writer_pretty(std::io::stdout(), &desc)?;
+                            } else {
+                                println!("{WORKFLOW_JSON}");
+                            }
                             Ok(())
                         },
-                        Self::Load => load_workflow(WORKFLOW_JSON, opts).await,
+                        Self::Load => {
+                            debug!("deserializing workflow descriptior");
+                            let desc: WorkflowDesc = serde_json::from_str(WORKFLOW_JSON)?;
+                            let db = DefaultDatabasePool::init(opts.into()).await?;
+                            load_workflow(env!("CARGO_BIN_NAME"), desc, &db).await
+                        },
                         Self::Run(task) => task.run().await,
                     }
                 }

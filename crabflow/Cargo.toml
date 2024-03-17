@@ -4,8 +4,10 @@ clap = {version = "4", features = ["env", "derive"]}
 crabflow-common = {path = "../common", features = ["clap", "db"]}
 crabflow-core = {path = "../core"}
 crabflow-dsl = {path = "../dsl"}
+serde_json = "1"
 thiserror = "1"
 tokio = {version = "1", features = ["full"]}
+tracing = "0"
 
 [package]
 description = "CrabFlow crate"

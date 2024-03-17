@@ -1,7 +1,3 @@
-SELECT
-    created_at,
-    target,
-    tag,
-    state
+SELECT *
 FROM workflow
 WHERE target = $1;
