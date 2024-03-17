@@ -42,6 +42,8 @@ struct Args {
         default_value_t = 30
     )]
     delay: u64,
+    #[arg(long, env = "POD_TEMPLATE", help = "JSON-encoded Pod template", default_value = include_str!("../resources/main/k8s/pod.json"))]
+    pod_template: String,
 }
 
 #[tokio::main]
@@ -64,7 +66,9 @@ async fn run(args: Args) -> Result {
     let mut sigterm = signal(SignalKind::terminate())?;
     info!("scheduler started");
     loop {
-        scheduler.schedule().await?;
+        if let Err(err) = scheduler.schedule().await {
+            error!("{err}");
+        }
         select! {
             _ = sleep_until(Instant::now() + delay) => {}
             _ = sigint.recv() => {

@@ -88,7 +88,7 @@ pub enum Error {
 pub trait DatabaseClient: Send + Sync {
     fn all_workflows(
         &mut self,
-    ) -> impl Future<Output = Result<impl Stream<Item = Result<Workflow>>>>;
+    ) -> impl Future<Output = Result<impl Stream<Item = Result<Workflow>> + Unpin>>;
 
     fn delete_workflow(&mut self, id: &str) -> impl Future<Output = Result<bool>>;
 
