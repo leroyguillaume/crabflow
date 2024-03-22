@@ -1,16 +1,8 @@
-use std::{
-    path::PathBuf,
-    process::exit,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::sleep,
-    time::Duration,
-};
+use std::{path::PathBuf, process::exit, time::Duration};
 
 use clap::Parser;
-use crabflow_common::init_tracing;
+use crabflow_common::{init_tracing, SignalListener};
+use tokio::{select, time::sleep};
 use tracing::{error, info};
 
 use crate::git::{DefaultSynchronizer, Synchronizer};
@@ -70,10 +62,11 @@ struct RevisionArg {
     tag: Option<String>,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     init_tracing();
     let args = Args::parse();
-    let rc = if let Err(err) = run(args) {
+    let rc = if let Err(err) = run(args).await {
         error!("{err}");
         1
     } else {
@@ -82,16 +75,22 @@ fn main() {
     exit(rc);
 }
 
-fn run(args: Args) -> Result {
+async fn run(args: Args) -> Result {
     let delay = Duration::from_secs(args.delay);
-    let git = DefaultSynchronizer::init(args)?;
-    let over = Arc::new(AtomicBool::default());
-    signal_hook::flag::register(signal_hook::consts::SIGINT, over.clone())?;
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, over.clone())?;
+    let rev = args.rev.into();
+    let git = DefaultSynchronizer::init(&args.path, &args.repository, &rev)?;
     info!("synchronizer started");
-    while !over.load(Ordering::Relaxed) {
-        git.synchronize()?;
-        sleep(delay);
+    let mut sig = SignalListener::init()?;
+    loop {
+        if let Err(err) = git.synchronize() {
+            error!("{err}");
+        }
+        select! {
+            _ = sleep(delay) => {}
+            _ = sig.recv() => {
+                break;
+            }
+        }
     }
     info!("synchronizer stopped");
     Ok(())

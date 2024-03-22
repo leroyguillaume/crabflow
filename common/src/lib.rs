@@ -1,7 +1,37 @@
 use std::io::stderr;
 
-use tracing::{subscriber::set_global_default, Level};
+use tokio::{
+    select,
+    signal::unix::{signal, Signal, SignalKind},
+};
+use tracing::{debug, subscriber::set_global_default, Level};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+
+pub struct SignalListener {
+    int: Signal,
+    term: Signal,
+}
+
+impl SignalListener {
+    pub fn init() -> std::io::Result<Self> {
+        debug!("creating unix signal listeners");
+        Ok(Self {
+            int: signal(SignalKind::interrupt())?,
+            term: signal(SignalKind::terminate())?,
+        })
+    }
+
+    pub async fn recv(&mut self) {
+        select! {
+            _ = self.int.recv() => {
+                debug!("SIGINT received");
+            }
+            _ = self.term.recv() => {
+                debug!("SIGTERM received");
+            }
+        }
+    }
+}
 
 pub fn init_tracing() {
     let env_filter = EnvFilter::builder()

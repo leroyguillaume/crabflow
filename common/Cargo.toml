@@ -6,13 +6,13 @@ futures = {version = "0", optional = true}
 serde_json = {version = "1", optional = true}
 sqlx = {version = "0", features = ["chrono", "postgres", "runtime-tokio"], optional = true}
 thiserror = {version = "1", optional = true}
-tokio = {version = "1", features = ["full"], optional = true}
+tokio = {version = "1", features = ["signal"]}
 tracing = "0"
 tracing-subscriber = {version = "0", features = ["env-filter"]}
 
 [features]
 clap = ["dep:clap"]
-db = ["dep:crabflow-core", "dep:futures", "dep:serde_json", "dep:sqlx", "dep:thiserror", "dep:tokio"]
+db = ["dep:crabflow-core", "dep:futures", "dep:serde_json", "dep:sqlx", "dep:thiserror"]
 
 [package]
 description = "Common utilities between CrabFlow crates"

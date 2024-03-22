@@ -1,7 +1,9 @@
-use git2::{AutotagOption, BranchType, FetchOptions, Repository};
-use tracing::{debug, instrument, Level};
+use std::path::Path;
 
-use crate::{Args, Error, Result, RevisionArg};
+use git2::{AutotagOption, BranchType, FetchOptions, Repository};
+use tracing::{debug, info, info_span, instrument};
+
+use crate::{Error, Result, RevisionArg};
 
 const REMOTE: &str = "origin";
 
@@ -34,17 +36,18 @@ pub struct DefaultSynchronizer {
 }
 
 impl DefaultSynchronizer {
-    #[instrument(level = Level::DEBUG, skip(args))]
-    pub fn init(args: Args) -> Result<Self> {
-        let git_dir = args.path.join(".git");
+    pub fn init(repo_path: &Path, url: &str, rev: &Revision) -> Result<Self> {
+        let span = info_span!("init", repo.path = %repo_path.display(), repo.url = url);
+        let _enter = span.enter();
+        let git_dir = repo_path.join(".git");
         let repo = if git_dir.is_dir() {
-            debug!("opening repository");
-            Repository::open(&args.path)
+            info!("opening repository");
+            Repository::open(repo_path)
         } else {
-            debug!("cloning repository");
-            Repository::clone(&args.repository, &args.path)
+            info!("cloning repository");
+            Repository::clone(url, repo_path)
         }?;
-        let rev = Revision::from(args.rev);
+        info!("repository opened");
         let refspec = match rev {
             Revision::Branch(branch) => format!("refs/remotes/{REMOTE}/{branch}"),
             Revision::DefaultBranch => {
@@ -76,6 +79,7 @@ impl Synchronizer for DefaultSynchronizer {
         self.repo.checkout_tree(&obj, None)?;
         debug!("setting head");
         self.repo.set_head(&self.refspec)?;
+        info!("repsository synchronized");
         Ok(())
     }
 }
