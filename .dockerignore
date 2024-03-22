@@ -1,0 +1,14 @@
+/.github
+/examples
+/helm
+/sh
+/target
+.cargo
+.dockerignore
+.git
+.gitignore
+.pre-commit-config.yaml
+docker-compose.yml
+Dockerfile
+LICENSE
+*.md

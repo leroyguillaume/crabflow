@@ -6,19 +6,31 @@ use std::{
     process::{Command, Output},
 };
 
-use crabflow_common::db::{
-    DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
-    DefaultDatabasePool, DefaultDatabaseTransaction,
+use crabflow_common::{
+    clap::DatabaseOptions,
+    db::{
+        DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
+        DefaultDatabasePool, DefaultDatabaseTransaction,
+    },
 };
 use crabflow_core::{Image, WorkflowState};
 use liquid::{object, Parser, ParserBuilder};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, debug_span, error, info, instrument, warn, Level};
 
-use crate::{Args, Error, Result};
+use crate::{Error, Result};
 
 const CMD_CARGO: &str = "cargo";
 const CMD_DOCKER: &str = "docker";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BuilderConfig {
+    pub build_only: bool,
+    pub db: DatabaseOptions,
+    pub docker_url: String,
+    pub path: PathBuf,
+    pub registry: Option<String>,
+}
 
 pub trait CargoClient {
     fn load_targets(&self, workflows_dir: &Path) -> Result<Vec<String>>;
@@ -32,6 +44,8 @@ pub trait DockerClient {
 
 pub trait Builder {
     fn build(&self) -> impl Future<Output = Result>;
+
+    fn path(&self) -> &Path;
 }
 
 pub trait Renderer {
@@ -93,12 +107,12 @@ impl
         DefaultRenderer,
     >
 {
-    #[instrument(skip(args))]
-    pub async fn init(args: Args) -> Result<Self> {
-        let run_kind = if args.build_only {
+    #[instrument(skip(config))]
+    pub async fn init(config: BuilderConfig) -> Result<Self> {
+        let run_kind = if config.build_only {
             RunKind::BuildOnly
         } else {
-            let db = DefaultDatabasePool::init(args.db.into()).await?;
+            let db = DefaultDatabasePool::init(config.db.into()).await?;
             RunKind::full(db)
         };
         debug!("creating Liquid parser");
@@ -106,10 +120,10 @@ impl
         Ok(Self {
             cargo: DefaultCargoClient,
             docker: DefaultDockerClient {
-                url: args.docker_url,
+                url: config.docker_url,
             },
-            path: args.path,
-            registry: args.registry,
+            path: config.path,
+            registry: config.registry,
             renderer: DefaultRenderer { parser },
             run_kind,
         })
@@ -188,6 +202,10 @@ impl<
             }
         }
         Ok(())
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
     }
 }
 

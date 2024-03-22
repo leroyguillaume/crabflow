@@ -4,6 +4,7 @@ crabflow-common = {path = "../common", features = ["clap", "db"]}
 crabflow-core = {path = "../core"}
 liquid = "0"
 notify = "6"
+notify-debouncer-full = "0"
 serde = {version = "1", features = ["derive"]}
 serde_json = "1"
 thiserror = "1"

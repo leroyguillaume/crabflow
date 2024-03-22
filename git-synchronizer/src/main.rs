@@ -55,7 +55,7 @@ struct Args {
         default_value = "."
     )]
     path: PathBuf,
-    #[arg(env = "REPOSITORY_URL", help = "Repository URL")]
+    #[arg(env = "REPOSITORY", help = "Repository URL")]
     repository: String,
     #[command(flatten)]
     rev: RevisionArg,

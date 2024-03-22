@@ -36,7 +36,8 @@ pub struct DefaultSynchronizer {
 impl DefaultSynchronizer {
     #[instrument(level = Level::DEBUG, skip(args))]
     pub fn init(args: Args) -> Result<Self> {
-        let repo = if args.path.is_dir() {
+        let git_dir = args.path.join(".git");
+        let repo = if git_dir.is_dir() {
             debug!("opening repository");
             Repository::open(&args.path)
         } else {

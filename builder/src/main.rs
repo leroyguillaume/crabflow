@@ -1,19 +1,25 @@
 use std::{
+    collections::BTreeSet,
     path::PathBuf,
     process::{exit, ExitStatus},
     string::FromUtf8Error,
+    time::Duration,
 };
 
 use builder::{Builder, DefaultBuilder};
 use clap::Parser;
 use crabflow_common::{clap::DatabaseOptions, init_tracing};
-use notify::{Event, EventKind, RecursiveMode, Watcher};
 use tokio::{
     select,
     signal::unix::{signal, SignalKind},
-    sync::mpsc::{channel, error::SendError},
+    sync::mpsc::error::SendError,
 };
 use tracing::{debug, error, info};
+
+use crate::{
+    builder::BuilderConfig,
+    watcher::{DefaultFileSystemWatcher, FileSystemWatcher},
+};
 
 type Result<T = ()> = std::result::Result<T, Error>;
 
@@ -68,8 +74,15 @@ enum Error {
 #[derive(Clone, Debug, Eq, Parser, PartialEq)]
 #[command(version)]
 struct Args {
-    #[arg(long, env = "BUILD_ONLY", help = "Only build images")]
+    #[arg(short, long, env = "BUILD_ONLY", help = "Only build images")]
     build_only: bool,
+    #[arg(
+        long,
+        env = "DEBOUNCE",
+        help = "Minimal number of seconds between two notify events before to re-build",
+        default_value_t = 1
+    )]
+    debounce: u64,
     #[command(flatten)]
     db: DatabaseOptions,
     #[arg(
@@ -79,6 +92,8 @@ struct Args {
         default_value = "unix:///var/run/docker.sock"
     )]
     docker_url: String,
+    #[arg(short, long, env = "IGNORING", help = "Paths to ignore")]
+    ignoring: Vec<PathBuf>,
     #[arg(
         env = "WORKFLOWS_DIR",
         help = "Path to directory that contains workflows"
@@ -104,34 +119,25 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result {
+    let config = BuilderConfig {
+        build_only: args.build_only,
+        db: args.db,
+        docker_url: args.docker_url,
+        path: args.path,
+        registry: args.registry,
+    };
+    let builder = DefaultBuilder::init(config).await?;
     if args.watch {
-        let (tx, mut rx) = channel(1);
-        debug!("creating file system watcher");
-        let mut watcher = notify::recommended_watcher({
-            move |event: std::result::Result<Event, notify::Error>| {
-                let res = event
-                    .map_err(Error::from)
-                    .and_then(|event| match event.kind {
-                        EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
-                            tx.blocking_send(())?;
-                            Ok(())
-                        }
-                        _ => Ok(()),
-                    });
-                if let Err(err) = res {
-                    error!("{err}");
-                }
-            }
-        })?;
-        debug!(path = %args.path.display(), "starting file system watcher");
-        watcher.watch(&args.path, RecursiveMode::Recursive)?;
+        let debounce = Duration::from_secs(args.debounce);
+        let mut ignoring = BTreeSet::from_iter(args.ignoring);
+        ignoring.insert("Dockerfile".into());
+        let mut watcher = DefaultFileSystemWatcher::start(builder.path(), debounce, ignoring)?;
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
-        let builder = DefaultBuilder::init(args).await?;
         info!("builder started");
         loop {
             select! {
-                _ = rx.recv() => {
+                _ = watcher.recv() => {
                     if let Err(err) = builder.build().await {
                         error!("{err}");
                     }
@@ -148,10 +154,10 @@ async fn run(args: Args) -> Result {
         }
         info!("builder stopped");
     } else {
-        let builder = DefaultBuilder::init(args).await?;
         builder.build().await?;
     }
     Ok(())
 }
 
 mod builder;
+mod watcher;

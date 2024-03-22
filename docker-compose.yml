@@ -1,6 +1,41 @@
 version: '3'
 
 services:
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PASSWORD: crabflow
+      DOCKER_URL: tcp://docker:2375
+      LOG_FILTER: debug
+      REGISTRY: registry:5000
+      WORKFLOWS_DIR: /var/lib/crabflow/workflows/examples
+    volumes:
+    - workflows-dir:/var/lib/crabflow/workflows
+    profiles: [full]
+
+  docker:
+    image: docker:24
+    privileged: true
+    command:
+    - --insecure-registry=registry:5000
+    environment:
+      DOCKER_TLS_CERTDIR: ''
+
+  git-synchronizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: git-synchronizer
+    environment:
+      REPOSITORY: https://github.com/leroyguillaume/crabflow
+    volumes:
+    - workflows-dir:/var/lib/crabflow/workflows
+    profiles: [full]
+
   postgres:
     image: postgres:16
     environment:
@@ -13,3 +48,16 @@ services:
     image: registry:2
     ports:
     - 5000:5000
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: scheduler
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PASSWORD: crabflow
+    profiles: [full]
+
+volumes:
+  workflows-dir:
