@@ -1,15 +1,14 @@
 [dependencies]
 clap = {version = "4", features = ["derive", "env"]}
-crabflow-common = {path = "../common"}
+crabflow-common = {path = "../common", features = ["db"]}
 crabflow-macros = {path = "../macros", features = ["internal"]}
-git2 = {version = "0", features = ["vendored-openssl"]}
 thiserror = "1"
 tokio = {version = "1", features = ["full"]}
 tracing = "0"
 
 [package]
-description = "Synchronizes CrabFlow workflows"
-name = "crabflow-git-synchronizer"
+description = "Runs CrabFlow database migrations"
+name = "crabflow-migrator"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true

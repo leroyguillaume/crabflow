@@ -15,6 +15,13 @@ services:
       WORKFLOWS_DIR: /var/lib/crabflow/workflows/examples
     volumes:
     - workflows-dir:/var/lib/crabflow/workflows
+    depends_on:
+      docker:
+        condition: service_started
+      migrator:
+        condition: service_completed_successfully
+      registry:
+        condition: service_started
     profiles: [full]
 
   docker:
@@ -34,6 +41,19 @@ services:
       REPOSITORY: https://github.com/leroyguillaume/crabflow
     volumes:
     - workflows-dir:/var/lib/crabflow/workflows
+    profiles: [full]
+
+  migrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PASSWORD: crabflow
+    depends_on:
+      postgres:
+        condition: service_started
     profiles: [full]
 
   postgres:
@@ -57,6 +77,9 @@ services:
     environment:
       DATABASE_HOST: postgres
       DATABASE_PASSWORD: crabflow
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
     profiles: [full]
 
 volumes:

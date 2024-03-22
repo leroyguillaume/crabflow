@@ -1,7 +1,7 @@
 use crabflow_common::db::{DatabaseClient, DatabasePool, DatabaseTransaction};
 
 use crabflow_core::{WorkflowDesc, WorkflowState};
-pub use crabflow_dsl::*;
+pub use crabflow_macros::*;
 use tracing::{info, info_span, Instrument};
 
 pub type Result<T = ()> = anyhow::Result<T>;

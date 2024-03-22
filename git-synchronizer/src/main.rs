@@ -1,7 +1,7 @@
-use std::{path::PathBuf, process::exit, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 use clap::Parser;
-use crabflow_common::{init_tracing, SignalListener};
+use crabflow_common::SignalListener;
 use tokio::{select, time::sleep};
 use tracing::{error, info};
 
@@ -62,19 +62,7 @@ struct RevisionArg {
     tag: Option<String>,
 }
 
-#[tokio::main]
-async fn main() {
-    init_tracing();
-    let args = Args::parse();
-    let rc = if let Err(err) = run(args).await {
-        error!("{err}");
-        1
-    } else {
-        0
-    };
-    exit(rc);
-}
-
+#[crabflow_macros::main]
 async fn run(args: Args) -> Result {
     let delay = Duration::from_secs(args.delay);
     let rev = args.rev.into();

@@ -1,9 +1,9 @@
 [dependencies]
 anyhow = "1"
 clap = {version = "4", features = ["env", "derive"]}
-crabflow-common = {path = "../common", features = ["clap", "db"]}
+crabflow-common = {path = "../common", features = ["db"]}
 crabflow-core = {path = "../core"}
-crabflow-dsl = {path = "../dsl"}
+crabflow-macros = {path = "../macros"}
 serde_json = "1"
 thiserror = "1"
 tokio = {version = "1", features = ["full"]}

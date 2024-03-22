@@ -1,7 +1,8 @@
 [dependencies]
 clap = {version = "4", features = ["derive", "env"]}
-crabflow-common = {path = "../common", features = ["clap", "db"]}
+crabflow-common = {path = "../common", features = ["db"]}
 crabflow-core = {path = "../core"}
+crabflow-macros = {path = "../macros", features = ["internal"]}
 liquid = "0"
 mockable = {version = "3", features = ["cmd"]}
 notify = "6"

@@ -1,5 +1,6 @@
 [env]
 DATABASE_PASSWORD = "crabflow"
 LOG_FILTER = "debug"
+MIGRATIONS_DIR = "migrator/resources/main/db/migrations"
 REGISTRY = "localhost:5000"
 WORKFLOWS_DIR = "examples"

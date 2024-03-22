@@ -75,6 +75,15 @@ COPY --from=build /build/crabflow-git-synchronizer /usr/local/bin/crabflow-git-s
 
 ENTRYPOINT ["/usr/local/bin/crabflow-git-synchronizer"]
 
+FROM runtime AS migrator
+
+ENV MIGRATIONS_DIR /opt/crabflow/migrations
+
+COPY --from=build /build/crabflow-migrator /usr/local/bin/crabflow-migrator
+COPY migrator/resources/main/db/migrations $MIGRATIONS_DIR
+
+ENTRYPOINT ["/usr/local/bin/crabflow-migrator"]
+
 FROM runtime AS scheduler
 
 COPY --from=build /build/crabflow-scheduler /usr/local/bin/crabflow-scheduler

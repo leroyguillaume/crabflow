@@ -11,6 +11,22 @@ use syn::{
     Attribute, Error, Expr, ExprAssign, Ident, Item, ItemFn, Meta, Path, Result, Stmt, Token,
 };
 
+#[cfg(feature = "internal")]
+#[proc_macro_attribute]
+pub fn main(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    let fun = parse_macro_input!(input as ItemFn);
+    let fun_name = &fun.sig.ident;
+    quote! {
+        #[tokio::main]
+        async fn main() {
+            crabflow_common::main(#fun_name).await;
+        }
+
+        #fun
+    }
+    .into()
+}
+
 #[proc_macro_attribute]
 pub fn workflow(attr: TokenStream, input: TokenStream) -> TokenStream {
     let workflow = parse_macro_input!(input as Workflow);

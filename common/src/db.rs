@@ -8,7 +8,7 @@ use sqlx::{
     postgres::PgConnectOptions,
     query, query_as, Acquire, PgConnection, PgPool, Postgres, Transaction,
 };
-use tracing::{debug, debug_span, info, instrument, trace, Instrument, Level};
+use tracing::{debug, debug_span, info, info_span, instrument, trace, Instrument, Level};
 
 macro_rules! impl_client {
     ($ty:ty) => {
@@ -110,7 +110,7 @@ pub trait DatabasePool<CONN: DatabaseClient, TX: DatabaseTransaction>: Send + Sy
 
     fn begin(&self) -> impl Future<Output = Result<TX>>;
 
-    fn run_migrations(&self) -> impl Future<Output = Result>;
+    fn run_migrations(&self, path: &Path) -> impl Future<Output = Result>;
 }
 
 pub trait DatabaseTransaction: DatabaseClient {
@@ -145,12 +145,18 @@ impl<'a> DatabasePool<DefaultDatabaseConnection, DefaultDatabaseTransaction<'a>>
         Ok(DefaultDatabaseTransaction(tx))
     }
 
-    async fn run_migrations(&self) -> Result {
-        debug!("loading database migrations");
-        let migrator = Migrator::new(Path::new("resources/main/db/migrations")).await?;
-        info!("running database migrations");
-        migrator.run(&self.0).await?;
-        Ok(())
+    async fn run_migrations(&self, path: &Path) -> Result {
+        let span = info_span!("run_migrations", path = %path.display());
+        async {
+            debug!("loading database migrations");
+            let migrator = Migrator::new(path).await?;
+            info!("running database migrations");
+            migrator.run(&self.0).await?;
+            info!("migrations executed successfully");
+            Ok(())
+        }
+        .instrument(span)
+        .await
     }
 }
 

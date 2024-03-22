@@ -331,7 +331,7 @@ dependencies = [
  "clap",
  "crabflow-common",
  "crabflow-core",
- "crabflow-dsl",
+ "crabflow-macros",
  "serde_json",
  "thiserror",
  "tokio",
@@ -345,6 +345,7 @@ dependencies = [
  "clap",
  "crabflow-common",
  "crabflow-core",
+ "crabflow-macros",
  "liquid",
  "mockable",
  "notify",
@@ -383,7 +384,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "crabflow-dsl"
+name = "crabflow-git-synchronizer"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "crabflow-common",
+ "crabflow-macros",
+ "git2",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "crabflow-macros"
 version = "0.1.0"
 dependencies = [
  "crabflow-core",
@@ -394,12 +408,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "crabflow-git-synchronizer"
+name = "crabflow-migrator"
 version = "0.1.0"
 dependencies = [
  "clap",
  "crabflow-common",
- "git2",
+ "crabflow-macros",
  "thiserror",
  "tokio",
  "tracing",
@@ -412,6 +426,7 @@ dependencies = [
  "clap",
  "crabflow-common",
  "crabflow-core",
+ "crabflow-macros",
  "futures",
  "k8s-openapi",
  "kube",

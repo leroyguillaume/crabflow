@@ -1,7 +1,7 @@
-use std::{process::exit, time::Duration};
+use std::time::Duration;
 
 use clap::Parser;
-use crabflow_common::{clap::DatabaseOptions, init_tracing};
+use crabflow_common::clap::DatabaseOptions;
 use tokio::{
     select,
     signal::unix::{signal, SignalKind},
@@ -46,19 +46,7 @@ struct Args {
     pod_template: String,
 }
 
-#[tokio::main]
-async fn main() {
-    init_tracing();
-    let args = Args::parse();
-    let rc = if let Err(err) = run(args).await {
-        error!("{err}");
-        1
-    } else {
-        0
-    };
-    exit(rc);
-}
-
+#[crabflow_macros::main]
 async fn run(args: Args) -> Result {
     let delay = Duration::from_secs(args.delay);
     let scheduler = DefaultScheduler::init(args).await?;

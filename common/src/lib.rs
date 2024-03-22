@@ -1,10 +1,12 @@
-use std::io::stderr;
+use std::{error::Error, io::stderr, process::exit};
 
+use ::clap::Parser;
+use futures::Future;
 use tokio::{
     select,
     signal::unix::{signal, Signal, SignalKind},
 };
-use tracing::{debug, subscriber::set_global_default, Level};
+use tracing::{debug, error, subscriber::set_global_default, Level};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 pub struct SignalListener {
@@ -33,6 +35,18 @@ impl SignalListener {
     }
 }
 
+pub async fn main<E: Error, F: Future<Output = Result<(), E>>, P: Parser>(run: impl Fn(P) -> F) {
+    init_tracing();
+    let args = P::parse();
+    let rc = if let Err(err) = run(args).await {
+        error!("{err}");
+        1
+    } else {
+        0
+    };
+    exit(rc);
+}
+
 pub fn init_tracing() {
     let env_filter = EnvFilter::builder()
         .with_env_var("LOG_FILTER")
@@ -47,7 +61,6 @@ pub fn init_tracing() {
     }
 }
 
-#[cfg(feature = "clap")]
 pub mod clap;
 #[cfg(feature = "db")]
 pub mod db;

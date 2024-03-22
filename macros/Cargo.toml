@@ -5,12 +5,15 @@ quote = "1"
 serde_json = "1"
 syn = {version = "2", features = ["full"]}
 
+[features]
+internal = []
+
 [lib]
 proc-macro = true
 
 [package]
 description = "CrabFlow macros"
-name = "crabflow-dsl"
+name = "crabflow-macros"
 authors.workspace = true
 categories.workspace = true
 edition.workspace = true
