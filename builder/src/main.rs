@@ -1,14 +1,15 @@
 use std::{
-    collections::BTreeSet,
-    path::PathBuf,
-    process::{exit, ExitStatus},
-    string::FromUtf8Error,
+    collections::BTreeSet, path::PathBuf, process::exit, string::FromUtf8Error, sync::Arc,
     time::Duration,
 };
 
-use builder::{Builder, DefaultBuilder};
+use builder::{Builder, BuilderMode, DefaultBuilder};
+use cargo::DefaultCargoClient;
 use clap::Parser;
-use crabflow_common::{clap::DatabaseOptions, init_tracing};
+use cmd::DefaultCommandRunner;
+use crabflow_common::{clap::DatabaseOptions, db::DefaultDatabasePool, init_tracing};
+use docker::DefaultDockerClient;
+use renderer::DefaultRenderer;
 use tokio::{
     select,
     signal::unix::{signal, SignalKind},
@@ -16,17 +17,14 @@ use tokio::{
 };
 use tracing::{debug, error, info};
 
-use crate::{
-    builder::BuilderConfig,
-    watcher::{DefaultFileSystemWatcher, FileSystemWatcher},
-};
+use crate::watcher::{DefaultFileSystemEventHandler, DefaultFileSystemWatcher, FileSystemWatcher};
 
 type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-    #[error("command {name} exited with {status}")]
-    Command { name: String, status: ExitStatus },
+    #[error("command {0} failed")]
+    Command(String),
     #[error("{0}")]
     Database(
         #[from]
@@ -94,15 +92,15 @@ struct Args {
     docker_url: String,
     #[arg(short, long, env = "IGNORING", help = "Paths to ignore")]
     ignoring: Vec<PathBuf>,
-    #[arg(
-        env = "WORKFLOWS_DIR",
-        help = "Path to directory that contains workflows"
-    )]
-    path: PathBuf,
     #[arg(short, long, env = "REGISTRY", help = "Image registry")]
     registry: Option<String>,
     #[arg(short, long, help = "Watch changes on workflows directory")]
     watch: bool,
+    #[arg(
+        env = "WORKFLOWS_DIR",
+        help = "Path to directory that contains workflows"
+    )]
+    workflows_dir: PathBuf,
 }
 
 #[tokio::main]
@@ -119,19 +117,35 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result {
-    let config = BuilderConfig {
-        build_only: args.build_only,
-        db: args.db,
-        docker_url: args.docker_url,
-        path: args.path,
-        registry: args.registry,
+    let runner = Arc::new(DefaultCommandRunner {
+        runner: mockable::DefaultCommandRunner,
+    });
+    let mode = if args.build_only {
+        let db = DefaultDatabasePool::init(args.db.into()).await?;
+        BuilderMode::normal(db)
+    } else {
+        BuilderMode::build_only()
     };
-    let builder = DefaultBuilder::init(config).await?;
+    let builder = DefaultBuilder {
+        cargo: DefaultCargoClient {
+            runner: runner.clone(),
+        },
+        docker: DefaultDockerClient {
+            runner,
+            url: args.docker_url,
+        },
+        mode,
+        registry: args.registry,
+        renderer: DefaultRenderer::init()?,
+        workflows_dir: args.workflows_dir,
+    };
     if args.watch {
         let debounce = Duration::from_secs(args.debounce);
         let mut ignoring = BTreeSet::from_iter(args.ignoring);
         ignoring.insert("Dockerfile".into());
-        let mut watcher = DefaultFileSystemWatcher::start(builder.path(), debounce, ignoring)?;
+        let handler = DefaultFileSystemEventHandler { ignoring };
+        let mut watcher =
+            DefaultFileSystemWatcher::start(&builder.workflows_dir, debounce, handler)?;
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
         info!("builder started");
@@ -160,4 +174,8 @@ async fn run(args: Args) -> Result {
 }
 
 mod builder;
+mod cargo;
+mod cmd;
+mod docker;
+mod renderer;
 mod watcher;

@@ -1,84 +1,43 @@
-use std::{
-    fs::File,
-    future::Future,
-    marker::PhantomData,
-    path::{Path, PathBuf},
-    process::{Command, Output},
-};
+use std::{future::Future, marker::PhantomData, path::PathBuf};
 
-use crabflow_common::{
-    clap::DatabaseOptions,
-    db::{
-        DatabaseClient, DatabasePool, DatabaseTransaction, DefaultDatabaseConnection,
-        DefaultDatabasePool, DefaultDatabaseTransaction,
-    },
-};
+use crabflow_common::db::{DatabaseClient, DatabasePool, DatabaseTransaction};
 use crabflow_core::{Image, WorkflowState};
-use liquid::{object, Parser, ParserBuilder};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, debug_span, error, info, instrument, warn, Level};
+use serde::Serialize;
+use tracing::{debug, info, instrument, warn};
 
-use crate::{Error, Result};
+use crate::{cargo::CargoClient, docker::DockerClient, renderer::Renderer, Result};
 
-const CMD_CARGO: &str = "cargo";
-const CMD_DOCKER: &str = "docker";
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BuilderConfig {
-    pub build_only: bool,
-    pub db: DatabaseOptions,
-    pub docker_url: String,
-    pub path: PathBuf,
-    pub registry: Option<String>,
+pub enum BuilderMode<
+    DB: DatabasePool<DBCONN, DBTX>,
+    DBCONN: DatabaseClient,
+    DBTX: DatabaseTransaction,
+> {
+    BuildOnly,
+    Normal {
+        db: DB,
+        _dbconn: PhantomData<DBCONN>,
+        _dbtx: PhantomData<DBTX>,
+    },
 }
 
-pub trait CargoClient {
-    fn load_targets(&self, workflows_dir: &Path) -> Result<Vec<String>>;
-}
+impl<DB: DatabasePool<DBCONN, DBTX>, DBCONN: DatabaseClient, DBTX: DatabaseTransaction>
+    BuilderMode<DB, DBCONN, DBTX>
+{
+    pub fn build_only() -> Self {
+        Self::BuildOnly
+    }
 
-pub trait DockerClient {
-    fn build(&self, image: &Image, workflows_dir: &Path) -> Result;
-
-    fn push(&self, tag: &str) -> Result;
+    pub fn normal(db: DB) -> Self {
+        Self::Normal {
+            db,
+            _dbconn: PhantomData,
+            _dbtx: PhantomData,
+        }
+    }
 }
 
 pub trait Builder {
     fn build(&self) -> impl Future<Output = Result>;
-
-    fn path(&self) -> &Path;
-}
-
-pub trait Renderer {
-    fn render(&self, template: &str, path: &Path, targets: &[String]) -> Result;
-}
-
-pub struct DefaultCargoClient;
-
-impl CargoClient for DefaultCargoClient {
-    fn load_targets(&self, workflows_dir: &Path) -> Result<Vec<String>> {
-        let span = debug_span!("load_targets", workflows_dir = %workflows_dir.display());
-        let _enter = span.enter();
-        debug!("running cargo");
-        let output = Command::new(CMD_CARGO)
-            .current_dir(workflows_dir)
-            .arg("read-manifest")
-            .output()?;
-        let stdout = command_stdout(CMD_CARGO, output)?;
-        debug!("decoding cargo output as json");
-        let manifest: Manifest = serde_json::from_str(&stdout)?;
-        let targets = manifest
-            .targets
-            .into_iter()
-            .filter_map(|target| {
-                target
-                    .kind
-                    .iter()
-                    .any(|kind| kind == "bin")
-                    .then_some(target.name)
-            })
-            .collect();
-        Ok(targets)
-    }
 }
 
 pub struct DefaultBuilder<
@@ -89,45 +48,12 @@ pub struct DefaultBuilder<
     DOCKER: DockerClient,
     RENDERER: Renderer,
 > {
-    cargo: CARGO,
-    docker: DOCKER,
-    path: PathBuf,
-    registry: Option<String>,
-    renderer: RENDERER,
-    run_kind: RunKind<DB, DBCONN, DBTX>,
-}
-
-impl
-    DefaultBuilder<
-        DefaultCargoClient,
-        DefaultDatabasePool,
-        DefaultDatabaseConnection,
-        DefaultDatabaseTransaction<'_>,
-        DefaultDockerClient,
-        DefaultRenderer,
-    >
-{
-    #[instrument(skip(config))]
-    pub async fn init(config: BuilderConfig) -> Result<Self> {
-        let run_kind = if config.build_only {
-            RunKind::BuildOnly
-        } else {
-            let db = DefaultDatabasePool::init(config.db.into()).await?;
-            RunKind::full(db)
-        };
-        debug!("creating Liquid parser");
-        let parser = ParserBuilder::with_stdlib().build()?;
-        Ok(Self {
-            cargo: DefaultCargoClient,
-            docker: DefaultDockerClient {
-                url: config.docker_url,
-            },
-            path: config.path,
-            registry: config.registry,
-            renderer: DefaultRenderer { parser },
-            run_kind,
-        })
-    }
+    pub cargo: CARGO,
+    pub docker: DOCKER,
+    pub mode: BuilderMode<DB, DBCONN, DBTX>,
+    pub registry: Option<String>,
+    pub renderer: RENDERER,
+    pub workflows_dir: PathBuf,
 }
 
 impl<
@@ -141,44 +67,51 @@ impl<
 {
     #[instrument(skip(self))]
     async fn build(&self) -> Result {
-        let targets = self.cargo.load_targets(&self.path)?;
+        let targets = self.cargo.load_targets(&self.workflows_dir).await?;
         let dockerfile_template = include_str!("../resources/main/Dockerfile.liquid");
-        let dockerfile_path = self.path.join("Dockerfile");
-        self.renderer
-            .render(dockerfile_template, &dockerfile_path, &targets)?;
+        let dockerfile_path = self.workflows_dir.join("Dockerfile");
+        let dockerfile_template_values = DockerfileTemplateValues { targets: &targets };
+        debug!("converting dockerfile template values into json");
+        let dockerfile_template_values = serde_json::to_value(dockerfile_template_values)?;
+        self.renderer.render(
+            dockerfile_template,
+            &dockerfile_path,
+            &dockerfile_template_values,
+        )?;
         for target in targets {
             let tag = if let Some(registry) = &self.registry {
                 format!("{registry}/{target}")
             } else {
                 target.clone()
             };
-            let image = Image { tag, target };
             info!(
-                workflow.image.tag = image.tag,
-                workflow.image.target = image.target,
+                workflow.image.tag = tag,
+                workflow.image.target = target,
                 "building image"
             );
-            self.docker.build(&image, &self.path)?;
+            self.docker
+                .build(&tag, &target, &self.workflows_dir)
+                .await?;
             info!(
-                workflow.image.tag = image.tag,
-                workflow.image.target = image.target,
+                workflow.image.tag = tag,
+                workflow.image.target = target,
                 "image successfully built"
             );
-            if let RunKind::Full { db, .. } = &self.run_kind {
+            if let BuilderMode::Normal { db, .. } = &self.mode {
                 info!(
-                    workflow.image.tag = image.tag,
-                    workflow.image.target = image.target,
+                    workflow.image.tag = tag,
+                    workflow.image.target = target,
                     "pushing image"
                 );
-                self.docker.push(&image.tag)?;
+                self.docker.push(&tag).await?;
                 info!(
-                    workflow.image.tag = image.tag,
-                    workflow.image.target = image.target,
+                    workflow.image.tag = tag,
+                    workflow.image.target = target,
                     "image successfully pushed"
                 );
                 let mut db = db.acquire().await?;
-                if let Some(mut workflow) = db.workflow_by_target(&image.target).await? {
-                    workflow.image = image;
+                if let Some(mut workflow) = db.workflow_by_target(&target).await? {
+                    workflow.image = Image { tag, target };
                     workflow.state = WorkflowState::Created;
                     if db.update_workflow_safely(&workflow).await? {
                         info!(
@@ -193,6 +126,7 @@ impl<
                         );
                     }
                 } else {
+                    let image = Image { tag, target };
                     let workflow = db.insert_workflow(&image).await?;
                     info!(
                         workflow.image.tag,
@@ -203,124 +137,9 @@ impl<
         }
         Ok(())
     }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
 }
 
-pub struct DefaultDockerClient {
-    url: String,
-}
-
-impl DockerClient for DefaultDockerClient {
-    fn build(&self, image: &Image, workflows_dir: &Path) -> Result {
-        let span = debug_span!("build", cwd = %workflows_dir.display(), workflow.image.target = image.target, workflow.image.tag = image.tag);
-        let _enter = span.enter();
-        debug!("running docker build");
-        let output = Command::new(CMD_DOCKER)
-            .current_dir(workflows_dir)
-            .arg("-H")
-            .arg(&self.url)
-            .arg("build")
-            .arg("-t")
-            .arg(&image.tag)
-            .arg("--target")
-            .arg(&image.target)
-            .arg(".")
-            .output()?;
-        command_stdout(CMD_DOCKER, output)?;
-        Ok(())
-    }
-
-    fn push(&self, tag: &str) -> Result {
-        let span = debug_span!("push", workflow.image.tag = tag);
-        let _enter = span.enter();
-        debug!("running docker push");
-        let output = Command::new(CMD_DOCKER)
-            .arg("-H")
-            .arg(&self.url)
-            .arg("push")
-            .arg(tag)
-            .output()?;
-        command_stdout(CMD_DOCKER, output)?;
-        Ok(())
-    }
-}
-
-pub struct DefaultRenderer {
-    parser: Parser,
-}
-
-impl Renderer for DefaultRenderer {
-    #[instrument(level = Level::DEBUG, skip(self, template, targets))]
-    fn render(&self, template: &str, path: &Path, targets: &[String]) -> Result {
-        debug!("parsing template");
-        let template = self.parser.parse(template)?;
-        let obj = object!({
-            "targets": targets,
-        });
-        debug!("rendering template");
-        let mut file = File::create(path)?;
-        template.render_to(&mut file, &obj)?;
-        Ok(())
-    }
-}
-
-enum RunKind<DB: DatabasePool<DBCONN, DBTX>, DBCONN: DatabaseClient, DBTX: DatabaseTransaction> {
-    BuildOnly,
-    Full {
-        db: DB,
-        _dbconn: PhantomData<DBCONN>,
-        _dbtx: PhantomData<DBTX>,
-    },
-}
-
-impl<DB: DatabasePool<DBCONN, DBTX>, DBCONN: DatabaseClient, DBTX: DatabaseTransaction>
-    RunKind<DB, DBCONN, DBTX>
-{
-    fn full(db: DB) -> Self {
-        Self::Full {
-            db,
-            _dbconn: PhantomData,
-            _dbtx: PhantomData,
-        }
-    }
-}
-
-fn command_stdout(command: &str, output: Output) -> Result<String> {
-    debug!("decoding command output as utf-8");
-    let stdout = String::from_utf8(output.stdout)?;
-    if tracing::enabled!(Level::DEBUG) {
-        for line in stdout.lines() {
-            debug!("{command}: {line}");
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        for line in stderr.lines() {
-            debug!("{command}: {line}");
-        }
-    }
-    if output.status.success() {
-        Ok(stdout)
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        for line in stderr.lines() {
-            error!("{command}: {line}");
-        }
-        Err(Error::Command {
-            name: command.into(),
-            status: output.status,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-struct Manifest {
-    targets: Vec<ManifestTarget>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-struct ManifestTarget {
-    kind: Vec<String>,
-    name: String,
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct DockerfileTemplateValues<'a> {
+    targets: &'a [String],
 }

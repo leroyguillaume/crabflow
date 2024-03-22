@@ -6,14 +6,65 @@ use std::{
 };
 
 use notify::{event::ModifyKind, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use notify_debouncer_full::{DebounceEventResult, Debouncer, FileIdMap};
+use notify_debouncer_full::{DebounceEventResult, DebouncedEvent, Debouncer, FileIdMap};
 use tokio::sync::mpsc::{channel, Receiver};
-use tracing::{debug, debug_span, error, instrument};
+use tracing::{debug, debug_span, error, instrument, Level};
 
 use crate::{Error, Result};
 
+pub trait FileSystemEventHandler: Send + Sync {
+    fn is_change(&self, event: &DebouncedEvent, dir: &Path) -> bool;
+}
+
 pub trait FileSystemWatcher {
     fn recv(&mut self) -> impl Future<Output = Option<()>>;
+}
+
+pub struct DefaultFileSystemEventHandler {
+    pub ignoring: BTreeSet<PathBuf>,
+}
+
+impl FileSystemEventHandler for DefaultFileSystemEventHandler {
+    #[instrument(level = Level::DEBUG, skip(self, event))]
+    fn is_change(&self, event: &DebouncedEvent, dir: &Path) -> bool {
+        let changed = match event.kind {
+            EventKind::Create(_) | EventKind::Remove(_) => true,
+            EventKind::Modify(kind) => matches!(
+                kind,
+                ModifyKind::Data(_) | ModifyKind::Name(_) | ModifyKind::Other
+            ),
+            _ => false,
+        };
+        if changed {
+            let count = event.paths.iter()
+                .filter_map(|path| {
+                    debug!(
+                        dir = %dir.display(),
+                        path = %path.display(),
+                        "computing relative filepath"
+                    );
+                    match path.strip_prefix(dir) {
+                        Ok(path) => {
+                            if self.ignoring.contains(path) {
+                                debug!(path = %path.display(), "file is ignored");
+                                None
+                            } else {
+                                Some(path)
+                            }
+                        },
+                        Err(err) => {
+                            error!(path = %path.display(), "failed to compute relative filepath: {err}");
+                            debug!(path = %path.display(), "file is ignored because of previous error");
+                            None
+                        }
+                    }
+                })
+                .count();
+            count > 0
+        } else {
+            false
+        }
+    }
 }
 
 pub struct DefaultFileSystemWatcher {
@@ -22,8 +73,12 @@ pub struct DefaultFileSystemWatcher {
 }
 
 impl DefaultFileSystemWatcher {
-    #[instrument(skip(path, debounce, ignoring))]
-    pub fn start(path: &Path, debounce: Duration, ignoring: BTreeSet<PathBuf>) -> Result<Self> {
+    #[instrument(skip(path, debounce, handler))]
+    pub fn start<H: FileSystemEventHandler + 'static>(
+        path: &Path,
+        debounce: Duration,
+        handler: H,
+    ) -> Result<Self> {
         debug!(path = %path.display(), "canonicalizing path");
         let path = path.canonicalize()?;
         let (tx, rx) = channel(1);
@@ -36,43 +91,12 @@ impl DefaultFileSystemWatcher {
                 let res = event
                     .map_err(|mut errs| Error::Notify(errs.remove(0)))
                     .and_then(|events| {
-                        let changed = events.into_iter().any(|event| {
-                            debug!("file system event received");
-                            let count = event
-                                .paths
-                                .iter()
-                                .filter_map(|event_path| {
-                                    debug!(
-                                        event_path = %event_path.display(),
-                                        path = %path.display(),
-                                        "computing relative filepath"
-                                    );
-                                    match event_path.strip_prefix(&path) {
-                                        Ok(path) => Some(path),
-                                        Err(err) => {
-                                            error!("failed to compute relative filepath: {err}");
-                                            None
-                                        }
-                                    }
-                                })
-                                .filter(|path| !ignoring.contains(*path))
-                                .count();
-                            let changed = match event.kind {
-                                EventKind::Create(_) | EventKind::Remove(_) => true,
-                                EventKind::Modify(kind) => matches!(
-                                    kind,
-                                    ModifyKind::Data(_) | ModifyKind::Name(_) | ModifyKind::Other
-                                ),
-                                _ => false,
-                            };
-                            count > 0 && changed
-                        });
+                        let changed = events.iter().any(|event| handler.is_change(event, &path));
                         if changed {
+                            debug!("sending notification");
                             tx.blocking_send(())?;
-                            Ok(())
-                        } else {
-                            Ok(())
                         }
+                        Ok(())
                     });
                 if let Err(err) = res {
                     error!("{err}");

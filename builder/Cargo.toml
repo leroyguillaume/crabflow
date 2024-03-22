@@ -3,6 +3,7 @@ clap = {version = "4", features = ["derive", "env"]}
 crabflow-common = {path = "../common", features = ["clap", "db"]}
 crabflow-core = {path = "../core"}
 liquid = "0"
+mockable = {version = "3", features = ["cmd"]}
 notify = "6"
 notify-debouncer-full = "0"
 serde = {version = "1", features = ["derive"]}
