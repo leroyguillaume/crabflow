@@ -24,7 +24,8 @@ ENV WORKFLOWS_DIR /var/lib/crabflow/workflows
 WORKDIR /opt/crabflow
 
 RUN <<EOF /bin/sh -e
-useradd -mrd /opt/crabflow crabflow
+groupadd -g 1000 crabflow
+useradd -mrd /opt/crabflow -u 1000 -g 1000 crabflow
 chown -R crabflow: .
 mkdir -p $WORKFLOWS_DIR
 chown -R crabflow: $WORKFLOWS_DIR
@@ -70,6 +71,18 @@ ENTRYPOINT ["/usr/local/bin/crabflow-builder"]
 CMD ["-w"]
 
 FROM runtime AS git-synchronizer
+
+USER root
+
+RUN <<EOF /bin/sh -e
+apt update
+apt install -y git
+apt-get clean
+EOF
+
+USER crabflow
+
+RUN git config --global safe.directory *
 
 COPY --from=build /build/crabflow-git-synchronizer /usr/local/bin/crabflow-git-synchronizer
 
