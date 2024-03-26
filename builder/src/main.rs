@@ -114,10 +114,10 @@ async fn run(args: Args) -> Result {
         runner: mockable::DefaultCommandRunner,
     });
     let mode = if args.build_only {
+        BuilderMode::build_only()
+    } else {
         let db = DefaultDatabasePool::init(args.db.into()).await?;
         BuilderMode::normal(db)
-    } else {
-        BuilderMode::build_only()
     };
     let builder = DefaultBuilder {
         cargo: DefaultCargoClient {
