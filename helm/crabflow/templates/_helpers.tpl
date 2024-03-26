@@ -1,15 +1,7 @@
-{{/*
-Expand the name of the chart.
-*/}}
 {{- define "crabflow.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Create a default fully qualified app name.
-We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
-If release name contains chart name it will be used as a full name.
-*/}}
 {{- define "crabflow.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
@@ -23,40 +15,62 @@ If release name contains chart name it will be used as a full name.
 {{- end }}
 {{- end }}
 
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
-{{- define "crabflow.chart" -}}
-{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- define "crabflow.databaseEnvVars" -}}
+- name: DATABASE_HOST
+  value: {{ .Values.database.host }}
+{{- if .Values.database.secret.name }}
+- name: DATABASE_PASSWORD
+  valueFrom:
+    secretKeyRef:
+        name: {{ .Values.database.secret.name }}
+        key: {{ .Values.database.secret.key }}
+{{- end }}
 {{- end }}
 
-{{/*
-Common labels
-*/}}
-{{- define "crabflow.labels" -}}
-helm.sh/chart: {{ include "crabflow.chart" . }}
-{{ include "crabflow.selectorLabels" . }}
-{{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-{{/*
-Selector labels
-*/}}
-{{- define "crabflow.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "crabflow.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-
-{{/*
-Create the name of the service account to use
-*/}}
 {{- define "crabflow.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
 {{- default (include "crabflow.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{- define "crabflow.common.labels" -}}
+helm.sh/chart: {{ include "crabflow.chart" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{- define "crabflow.common.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "crabflow.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "crabflow.builder.fullname" -}}
+{{- if .Values.builder.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- $name := default (printf "%s-builder" .Chart.Name) .Values.builder.nameOverride }}
+{{- if contains $name .Release.Name }}
+{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "crabflow.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "crabflow.builder.labels" -}}
+{{ include "crabflow.common.labels" . }}
+{{ include "crabflow.builder.selectorLabels" . }}
+{{- end }}
+
+{{- define "crabflow.builder.selectorLabels" -}}
+{{ include "crabflow.common.selectorLabels" . }}
+app.kubernetes.io/component: builder
 {{- end }}
