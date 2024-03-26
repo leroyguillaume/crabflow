@@ -16,6 +16,14 @@ use tracing::{debug, error, info};
 
 use crate::watcher::{DefaultFileSystemEventHandler, DefaultFileSystemWatcher, FileSystemWatcher};
 
+macro_rules! build {
+    ($builder:expr) => {
+        if let Err(err) = $builder.build().await {
+            error!("{err}");
+        }
+    };
+}
+
 type Result<T = ()> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
@@ -134,12 +142,11 @@ async fn run(args: Args) -> Result {
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
         info!("builder started");
+        build!(&builder);
         loop {
             select! {
                 _ = watcher.recv() => {
-                    if let Err(err) = builder.build().await {
-                        error!("{err}");
-                    }
+                    build!(builder);
                 }
                 _ = sigint.recv() => {
                     debug!("SIGINT received");
