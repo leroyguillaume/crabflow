@@ -9,6 +9,7 @@ on:
     branches: ['**']
     paths:
     - .github/workflows/build-test.yml
+    - '**/resources/**'
     - '**.rs'
     - Cargo.lock
     - Cargo.toml
