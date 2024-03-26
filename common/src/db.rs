@@ -1,6 +1,6 @@
 use std::{future::Future, path::Path};
 
-use crabflow_core::{Image, Workflow, WorkflowState};
+use crabflow_core::{Image, Workflow, WorkflowLoading, WorkflowState};
 use futures::{Stream, StreamExt};
 use sqlx::{
     migrate::{MigrateError, Migrator},
@@ -9,6 +9,23 @@ use sqlx::{
     query, query_as, Acquire, PgConnection, PgPool, Postgres, Transaction,
 };
 use tracing::{debug, debug_span, info, info_span, instrument, trace, Instrument, Level};
+
+#[macro_export]
+macro_rules! transactional {
+    ($tx:expr, $f:expr) => {
+        match $f.await {
+            Ok(val) => {
+                $tx.commit().await?;
+                Ok(val)
+            }
+            Err(err) => {
+                $tx.rollback().await?;
+                Err(err)
+            }
+        }
+    };
+}
+pub use transactional;
 
 macro_rules! impl_client {
     ($ty:ty) => {
@@ -30,6 +47,21 @@ macro_rules! impl_client {
                     workflow.image.target = image.target
                 );
                 insert_workflow(&image, &mut self.0).instrument(span).await
+            }
+
+            async fn insert_workflow_loading(
+                &mut self,
+                id: &str,
+                target: &str,
+            ) -> Result<WorkflowLoading> {
+                let span = debug_span!(
+                    "insert_workflow_loading",
+                    workflow.image.target = target,
+                    workflow.loading.id = id
+                );
+                insert_workflow_loading(id, target, &mut self.0)
+                    .instrument(span)
+                    .await
             }
 
             async fn update_workflow(&mut self, workflow: &Workflow) -> Result<bool> {
@@ -93,6 +125,12 @@ pub trait DatabaseClient: Send + Sync {
     fn delete_workflow(&mut self, id: &str) -> impl Future<Output = Result<bool>>;
 
     fn insert_workflow(&mut self, image: &Image) -> impl Future<Output = Result<Workflow>>;
+
+    fn insert_workflow_loading(
+        &mut self,
+        id: &str,
+        target: &str,
+    ) -> impl Future<Output = Result<WorkflowLoading>>;
 
     fn update_workflow(&mut self, workflow: &Workflow) -> impl Future<Output = Result<bool>>;
 
@@ -170,11 +208,13 @@ impl_client!(DefaultDatabaseTransaction<'_>);
 
 impl DatabaseTransaction for DefaultDatabaseTransaction<'_> {
     async fn commit(self) -> Result {
+        debug!("committing transaction");
         self.0.commit().await?;
         Ok(())
     }
 
     async fn rollback(self) -> Result {
+        debug!("rolling back transation");
         self.0.rollback().await?;
         Ok(())
     }
@@ -225,6 +265,22 @@ async fn insert_workflow<
         .bind(&image.tag)
         .fetch_one(db)
         .await?;
+    Ok(workflow)
+}
+
+async fn insert_workflow_loading<
+    'a,
+    A: Acquire<'a, Database = Postgres, Connection = &'a mut PgConnection>,
+>(
+    id: &str,
+    target: &str,
+    db: A,
+) -> Result<WorkflowLoading> {
+    trace!("acquiring database connection");
+    let db = db.acquire().await?;
+    let sql = include_str!("../resources/main/db/queries/insert-workflow-loading.sql");
+    debug!("inserting workflow loading");
+    let workflow = query_as(sql).bind(id).bind(target).fetch_one(db).await?;
     Ok(workflow)
 }
 

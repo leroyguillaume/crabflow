@@ -11,3 +11,9 @@ CREATE TABLE workflow (
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     descriptor JSONB DEFAULT NULL
 );
+
+CREATE TABLE workflow_loading (
+    id VARCHAR (255) NOT NULL PRIMARY KEY,
+    target VARCHAR (255) NOT NULL REFERENCES workflow,
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);

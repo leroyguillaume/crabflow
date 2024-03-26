@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app.kubernetes.io/component: workflow
+    app.kubernetes.io/instance: crabflow
+    app.kubernetes.io/name: crabflow
+  namespace: crabflow
+spec:
+  containers:
+  - env:
+    - name: DATABASE_HOST
+      value: crabflow-postgresql
+    - name: DATABASE_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: password
+          name: crabflow-postgresql
+    imagePullPolicy: Always
+    name: workflow
+  serviceAccountName: crabflow

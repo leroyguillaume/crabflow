@@ -3,6 +3,7 @@ chrono = "0"
 serde = {version = "1", features = ["derive"]}
 serde_json = {version = "1", optional = true}
 sqlx = {version = "0", features = ["json", "postgres"], optional = true}
+uuid = "1"
 
 [features]
 db = ["dep:serde_json", "dep:sqlx"]

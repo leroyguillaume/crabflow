@@ -2,5 +2,6 @@
 DATABASE_PASSWORD = "crabflow"
 LOG_FILTER = "debug"
 MIGRATIONS_DIR = "migrator/resources/main/db/migrations"
+POD_TEMPLATE = "scheduler/resources/main/k8s/pod-template.yaml"
 REGISTRY = "localhost:5000"
 WORKFLOWS_DIR = "examples"
