@@ -38,7 +38,7 @@ builder:
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""
 
-  dockerUrl: tcp://docker:2375
+  dockerUrl: tcp://127.0.0.1:2375
   registry: ""
   workflowsDir: /var/lib/crabflow/workflows/examples
 
@@ -151,7 +151,7 @@ builder:
 
     image:
       repository: gleroy/crabflow-git-synchronizer
-      pullPolicy: Always
+      pullPolicy: IfNotPresent
       tag: ""
 
     repository: https://github.com/leroyguillaume/crabflow
@@ -191,7 +191,7 @@ builder:
 migrator:
   image:
     repository: gleroy/crabflow-migrator
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
     tag: ""
 
   command: []
