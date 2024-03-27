@@ -60,6 +60,7 @@ EOF
 USER crabflow
 
 RUN <<EOF /bin/sh -e
+mkdir .docker
 curl -sSfo /tmp/rustup.sh https://sh.rustup.rs
 /bin/bash /tmp/rustup.sh -y
 rm /tmp/rustup.sh
