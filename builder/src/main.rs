@@ -11,6 +11,7 @@ use tokio::{
     select,
     signal::unix::{signal, SignalKind},
     sync::mpsc::error::SendError,
+    time::sleep,
 };
 use tracing::{debug, error, info};
 
@@ -83,7 +84,7 @@ struct Args {
         long,
         env = "DEBOUNCE",
         help = "Minimal number of seconds between two notify events before to re-build",
-        default_value_t = 1
+        default_value_t = 5
     )]
     debounce: u64,
     #[command(flatten)]
@@ -142,6 +143,7 @@ async fn run(args: Args) -> Result {
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
         info!("builder started");
+        sleep(debounce).await;
         build!(&builder);
         loop {
             select! {
