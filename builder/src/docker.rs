@@ -1,7 +1,7 @@
 use std::{future::Future, path::Path, sync::Arc};
 
 use mockable::Command;
-use tracing::{debug, debug_span, Instrument};
+use tracing::{debug, debug_span, instrument, Instrument, Level};
 
 use crate::{cmd::CommandRunner, Result};
 
@@ -9,6 +9,8 @@ const CMD: &str = "docker";
 
 pub trait DockerClient {
     fn build(&self, tag: &str, target: &str, cwd: &Path) -> impl Future<Output = Result>;
+
+    fn info(&self) -> impl Future<Output = Result>;
 
     fn push(&self, tag: &str) -> impl Future<Output = Result>;
 }
@@ -39,6 +41,16 @@ impl<RUNNER: CommandRunner> DockerClient for DefaultDockerClient<RUNNER> {
         }
         .instrument(span)
         .await
+    }
+
+    #[instrument(level = Level::DEBUG, skip(self))]
+    async fn info(&self) -> Result {
+        let cmd = Command::new(CMD)
+            .with_arg("-H")
+            .with_arg(&self.url)
+            .with_arg("info");
+        self.runner.run(&cmd).await?;
+        Ok(())
     }
 
     async fn push(&self, tag: &str) -> Result {

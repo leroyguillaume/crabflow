@@ -5,13 +5,12 @@ use cargo::DefaultCargoClient;
 use clap::Parser;
 use cmd::DefaultCommandRunner;
 use crabflow_common::{clap::DatabaseOptions, db::DefaultDatabasePool};
-use docker::DefaultDockerClient;
+use docker::{DefaultDockerClient, DockerClient};
 use renderer::DefaultRenderer;
 use tokio::{
     select,
     signal::unix::{signal, SignalKind},
     sync::mpsc::error::SendError,
-    time::sleep,
 };
 use tracing::{debug, error, info};
 
@@ -120,14 +119,14 @@ async fn run(args: Args) -> Result {
         let db = DefaultDatabasePool::init(args.db.into()).await?;
         BuilderMode::normal(db)
     };
+    let docker = DefaultDockerClient {
+        runner: runner.clone(),
+        url: args.docker_url,
+    };
+    docker.info().await?;
     let builder = DefaultBuilder {
-        cargo: DefaultCargoClient {
-            runner: runner.clone(),
-        },
-        docker: DefaultDockerClient {
-            runner,
-            url: args.docker_url,
-        },
+        cargo: DefaultCargoClient { runner },
+        docker,
         mode,
         registry: args.registry,
         renderer: DefaultRenderer::init()?,
@@ -143,7 +142,6 @@ async fn run(args: Args) -> Result {
         let mut sigint = signal(SignalKind::interrupt())?;
         let mut sigterm = signal(SignalKind::terminate())?;
         info!("builder started");
-        sleep(debounce).await;
         build!(&builder);
         loop {
             select! {
