@@ -6,6 +6,7 @@ concurrency:
 
 on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
@@ -29,5 +30,21 @@ jobs:
           target/
         key: test_cargo
 
-    - name: run test
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3'
+        cache: pip
+
+    - name: install dependencies
+      run: pip install -r requirements.txt
+
+    - name: test
       run: cargo test --all-features
+
+    - name: run python example
+      run: |
+        python -m venv venv
+        . ./venv/bin/activate
+        maturin develop -F py
+        python examples/python.py

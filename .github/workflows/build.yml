@@ -1,0 +1,64 @@
+name: build
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crate:
+    name: crate
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+
+    - name: set up rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: build
+      run: cargo build -r
+
+  wheel:
+    name: wheel
+    runs-on: ${{ matrix.target.runs-on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+        - name: aarch64-unknown-linux-gnu
+          runs-on: ubuntu-latest
+        - name: x86_64-apple-darwin
+          runs-on: macos-latest
+        - name: x86_64-unknown-linux-gnu
+          runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+
+    - name: set up rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3'
+        cache: pip
+
+    - name: install dependencies
+      run: pip install -r requirements.txt
+
+    - name: build
+      uses: PyO3/maturin-action@v1
+      with:
+        command: build
+        args: -F py -ri python3.10
+        target: ${{ matrix.target.name }}
+
+    - name: upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel-${{ matrix.target.name }}
+        path: target/wheels
