@@ -1,0 +1,30 @@
+[dependencies]
+chrono = "0"
+pyo3 = {version = "0", features = ["experimental-async", "extension-module"], optional = true}
+thiserror = "1"
+tokio = {version = "1", features = ["rt", "rt-multi-thread", "sync", "time"]}
+
+[dev-dependencies]
+anyhow = "1"
+mockall = "0"
+tokio = {version = "1", features = ["macros", "rt-multi-thread"]}
+
+[features]
+default = ["tokio"]
+py = ["dep:pyo3", "tokio"]
+tokio = []
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[package]
+authors = ["Guillaune Leroy <pro.guillaume.leroy@gmail.com>"]
+description = "Task orchestrator."
+edition = "2021"
+license = "MIT"
+name = "crabflow"
+repository = "https://github.com/leroyguillaume/crabflow"
+version = "0.1.0"
+
+[package.metadata.docs.rs]
+all-features = true

@@ -1,0 +1,41 @@
+name: pre-commit
+
+concurrency:
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+
+on:
+  pull_request:
+  push:
+    branches:
+    - main
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+
+    - name: set up python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3'
+
+    - name: set up rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+
+    - name: restore rust cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: pre-commit_cargo
+
+    - name: run pre-commit
+      uses: pre-commit/action@v3.0.1

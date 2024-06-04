@@ -1,0 +1,48 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.5.0
+  hooks:
+  - id: check-json
+  - id: check-yaml
+  - id: pretty-format-json
+    args: [--autofix]
+  - id: trailing-whitespace
+    exclude: .rs$
+  - id: end-of-file-fixer
+    exclude: .rs$
+- repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+  rev: v2.11.0
+  hooks:
+  - id: pretty-format-yaml
+    args: [--autofix]
+  - id: pretty-format-toml
+    args: [--autofix]
+    exclude: ^Cargo.lock
+- repo: https://github.com/doublify/pre-commit-rust
+  rev: v1.0
+  hooks:
+  - id: fmt
+  - id: cargo-check
+    name: cargo-check (no default features)
+    args: [--no-default-features, --tests]
+  - id: cargo-check
+    name: cargo-check (tokio)
+    args: [-F, tokio, --tests]
+  - id: cargo-check
+    name: cargo-check (py)
+    args: [-F, py, --tests]
+  - id: cargo-check
+    name: cargo-check (examples)
+    args: [--examples, --all-features]
+  - id: clippy
+    name: clippy (no default features)
+    args: [--no-default-features, --tests, --, -D, warnings]
+  - id: clippy
+    name: clippy (tokio)
+    args: [-F, tokio, --tests, --, -D, warnings]
+  - id: clippy
+    name: clippy (py)
+    args: [-F, py, --tests, --, -D, warnings]
+  - id: clippy
+    name: clippy (examples)
+    args: [--examples, --all-features, --, -D, warnings]
